@@ -3,7 +3,7 @@ const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '../../backend/.env') });
 
-const MONGO_URI = process.env.MONGODB_URI;
+const MONGO_URI =  process.env.MONGODB_URI
 
 const connectDB = async () => {
   try {

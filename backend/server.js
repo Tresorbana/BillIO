@@ -52,8 +52,7 @@ const PORT = process.env.PORT1 || 8228;
 const TEAM_ID = "1nt3ern4l_53rv3r_3rr0r";
 const MQTT_BROKER = "mqtt://157.173.101.159:1883";
 // const MQTT_BROKER = "mqtt://broker.hivemq.com:1883";
-// const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@rfid-tap-pay.igoregv.mongodb.net/?appName=rfid-tap-paymongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@rfid-tap-pay.igoregv.mongodb.net/?appName=rfid-tap-pay";
-const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@tap-pay.2j0w4vo.mongodb.net/?appName=tap-pay";
+const MONGO_URI = process.env.MONGODB_URI;
 const SECRET_KEY = process.env.JWT_SECRET || 'secret123';
 
 // MongoDB Connection

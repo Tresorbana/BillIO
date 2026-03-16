@@ -3,9 +3,7 @@ const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '../../backend/.env') });
 
-const MONGO_URI =
-  process.env.MONGODB_URI ||
-  'mongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@tap-pay.2j0w4vo.mongodb.net/?appName=tap-pay';
+const MONGO_URI = process.env.MONGODB_URI;
 
 const connectDB = async () => {
   try {

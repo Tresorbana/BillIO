@@ -5,7 +5,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 // Connect to database
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@tap-pay.2j0w4vo.mongodb.net/?appName=tap-pay');
+    await mongoose.connect(process.env.MONGODB_URI);
     console.log('MongoDB connected');
   } catch (err) {
     console.error('Database connection error:', err);

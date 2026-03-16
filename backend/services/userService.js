@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const { User } = require('../../database/entities');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -18,7 +18,8 @@ class UserService {
   }
 
   static generateToken(user) {
-    return jwt.sign({ id: user._id, username: user.username, role: user.role }, 'secret', { expiresIn: '1h' });
+    const secret = process.env.JWT_SECRET || 'secret123';
+    return jwt.sign({ id: user._id, username: user.username, role: user.role }, secret, { expiresIn: '24h' });
   }
 }
 

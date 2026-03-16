@@ -1,19 +1,7 @@
+const { connectDB } = require('../config/config');
+const { Product } = require('../entities');
 const mongoose = require('mongoose');
-const { Product } = require('../../database/entities');
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
-// Connect to database
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@tap-pay.2j0w4vo.mongodb.net/?appName=tap-pay');
-    console.log('MongoDB connected');
-  } catch (err) {
-    console.error('Database connection error:', err);
-    process.exit(1);
-  }
-};
-
-// Initial product data (without icon property)
 const initialProducts = [
   // Food & Beverages
   { id: 'coffee', name: 'Coffee', price: 2.50, category: 'food' },
@@ -22,6 +10,7 @@ const initialProducts = [
   { id: 'snack', name: 'Snack Pack', price: 3.00, category: 'food' },
   { id: 'juice', name: 'Fresh Juice', price: 3.50, category: 'food' },
   { id: 'salad', name: 'Salad Bowl', price: 6.00, category: 'food' },
+  { id: 'chips', name: 'Chips', price: 2.50, category: 'food' },
 
   // Rwandan Local Foods
   { id: 'brochette', name: 'Brochette', price: 4.00, category: 'rwandan' },
@@ -33,14 +22,13 @@ const initialProducts = [
   { id: 'agatogo', name: 'Agatogo', price: 4.50, category: 'rwandan' },
   { id: 'urwagwa', name: 'Urwagwa (Banana Beer)', price: 2.50, category: 'rwandan' },
 
-  // Snacks & Drinks
+  // Drinks
   { id: 'fanta', name: 'Fanta', price: 1.20, category: 'drinks' },
   { id: 'primus', name: 'Primus Beer', price: 2.00, category: 'drinks' },
   { id: 'mutzig', name: 'Mutzig Beer', price: 2.00, category: 'drinks' },
   { id: 'inyange-juice', name: 'Inyange Juice', price: 1.50, category: 'drinks' },
-  { id: 'chips', name: 'Chips', price: 2.50, category: 'food' },
 
-  // Domain Registration Services
+  // Domain Registration
   { id: 'domain-com', name: '.com Domain', price: 12.00, category: 'domains' },
   { id: 'domain-net', name: '.net Domain', price: 11.00, category: 'domains' },
   { id: 'domain-org', name: '.org Domain', price: 10.00, category: 'domains' },
@@ -56,28 +44,21 @@ const initialProducts = [
   { id: 'hosting-basic', name: 'Basic Hosting (1mo)', price: 5.00, category: 'services' },
   { id: 'hosting-pro', name: 'Pro Hosting (1mo)', price: 15.00, category: 'services' },
   { id: 'ssl-cert', name: 'SSL Certificate', price: 10.00, category: 'services' },
-  { id: 'email-pro', name: 'Professional Email', price: 8.00, category: 'services' }
+  { id: 'email-pro', name: 'Professional Email', price: 8.00, category: 'services' },
 ];
 
-const seedProducts = async () => {
+async function seedProducts() {
+  await connectDB();
   try {
-    // Clear existing products
     await Product.deleteMany({});
     console.log('Cleared existing products');
-
-    // Insert initial products
     const products = await Product.insertMany(initialProducts);
     console.log(`Seeded ${products.length} products`);
-
-    console.log('Seeding completed successfully');
   } catch (err) {
     console.error('Seeding error:', err);
   } finally {
     mongoose.connection.close();
   }
-};
+}
 
-// Run the seeder
-connectDB().then(() => {
-  seedProducts();
-});
+seedProducts();

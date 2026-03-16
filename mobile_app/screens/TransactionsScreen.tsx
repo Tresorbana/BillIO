@@ -3,8 +3,20 @@ import { View, Text, ScrollView } from 'react-native';
 import { styles } from '../styles';
 import { API_BASE } from '../config';
 
+interface Transaction {
+  _id: string;
+  uid: string;
+  holderName: string;
+  type: 'topup' | 'debit';
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  description: string;
+  timestamp: string;
+}
+
 export default function TransactionsScreen() {
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -13,33 +25,11 @@ export default function TransactionsScreen() {
 
   const loadTransactions = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/transactions`);
+      const response = await fetch(`${API_BASE}/transactions`);
       const data = await response.json();
-      setTransactions(data);
-    } catch (error) {
-      // Mock data fallback
-      setTransactions([
-        {
-          id: '1',
-          type: 'topup',
-          amount: 50,
-          uid: 'ABC123',
-          created_at: new Date().toISOString(),
-          product_name: null,
-          quantity: null,
-          balance_after: 150
-        },
-        {
-          id: '2',
-          type: 'payment',
-          amount: 25,
-          uid: 'DEF456',
-          created_at: new Date().toISOString(),
-          product_name: 'Coffee',
-          quantity: 1,
-          balance_after: 75
-        }
-      ]);
+      setTransactions(Array.isArray(data) ? data : []);
+    } catch {
+      setTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -60,7 +50,7 @@ export default function TransactionsScreen() {
 
       <View style={styles.panel}>
         <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>All Transactions</Text>
+          <Text style={styles.panelTitle}>All Transactions ({transactions.length})</Text>
         </View>
         <ScrollView style={styles.panelBody}>
           {transactions.length > 0 ? (
@@ -69,24 +59,22 @@ export default function TransactionsScreen() {
                 <Text style={styles.tableHeaderCell}>Time</Text>
                 <Text style={styles.tableHeaderCell}>Type</Text>
                 <Text style={styles.tableHeaderCell}>Card UID</Text>
-                <Text style={styles.tableHeaderCell}>Details</Text>
+                <Text style={styles.tableHeaderCell}>Holder</Text>
                 <Text style={styles.tableHeaderCell}>Amount</Text>
                 <Text style={styles.tableHeaderCell}>Balance After</Text>
               </View>
               {transactions.map(tx => (
-                <View key={tx.id} style={styles.tableRow}>
-                  <Text style={styles.tableCell}>{new Date(tx.created_at).toLocaleString()}</Text>
+                <View key={tx._id} style={styles.tableRow}>
+                  <Text style={styles.tableCell}>{new Date(tx.timestamp).toLocaleString()}</Text>
                   <View style={[styles.badge, tx.type === 'topup' ? styles.badgeTopup : styles.badgePayment]}>
-                    <Text style={styles.badgeText}>{tx.type.toUpperCase()}</Text>
+                    <Text style={styles.badgeText}>{tx.type === 'topup' ? 'TOPUP' : 'PAYMENT'}</Text>
                   </View>
                   <Text style={styles.tableCellMono}>{tx.uid}</Text>
-                  <Text style={styles.tableCell}>
-                    {tx.product_name ? `${tx.product_name} × ${tx.quantity}` : '—'}
-                  </Text>
+                  <Text style={styles.tableCell}>{tx.holderName}</Text>
                   <Text style={[styles.tableCell, tx.type === 'topup' ? styles.textSuccess : styles.textDanger]}>
                     {tx.type === 'topup' ? '+' : '-'}${tx.amount.toLocaleString()}
                   </Text>
-                  <Text style={styles.tableCell}>${tx.balance_after.toLocaleString()}</Text>
+                  <Text style={styles.tableCell}>${tx.balanceAfter.toLocaleString()}</Text>
                 </View>
               ))}
             </View>

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { styles } from '../styles';
 import { API_BASE } from '../config';
 
 interface Product {
-  id: number;
+  id: string;
   name: string;
   price: number;
   category: string;
@@ -18,19 +18,19 @@ interface CartItem {
 
 interface Card {
   uid: string;
-  card_holder: string;
+  holderName: string;
   balance: number;
-  registered_at: string;
+  createdAt: string;
 }
 
 interface PaymentsScreenProps {
   products: Product[];
-  cart: {[key: number]: number};
+  cart: { [key: string]: number };
   scannedCard: Card | null;
   setScannedCard: (card: Card | null) => void;
-  onToggleProduct: (id: number) => void;
-  onSetCartQty: (id: number, qty: number) => void;
-  onPay: (items: {productId: number, quantity: number}[]) => Promise<void>;
+  onToggleProduct: (id: string) => void;
+  onSetCartQty: (id: string, qty: number) => void;
+  onPay: (items: { productId: string; quantity: number; amount: number }[]) => Promise<void>;
   getCartItems: () => CartItem[];
   getCartTotal: () => number;
 }
@@ -44,50 +44,53 @@ export default function PaymentsScreen({
   onSetCartQty,
   onPay,
   getCartItems,
-  getCartTotal
+  getCartTotal,
 }: PaymentsScreenProps) {
   const [manualUid, setManualUid] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const cartItems = getCartItems();
   const totalCost = getCartTotal();
   const hasSelection = cartItems.length > 0;
-  const canPay = hasSelection && scannedCard?.card_holder && scannedCard.balance >= totalCost;
-  const insufficient = hasSelection && scannedCard?.card_holder && scannedCard.balance < totalCost;
+  const canPay = hasSelection && scannedCard?.holderName && scannedCard.balance >= totalCost;
+  const insufficient = hasSelection && scannedCard?.holderName && scannedCard.balance < totalCost;
 
   const manualLookup = async () => {
     if (!manualUid.trim()) return;
     try {
-      const response = await fetch(`${API_BASE}/api/cards/${manualUid.trim()}`);
+      const response = await fetch(`${API_BASE}/api/card/${manualUid.trim()}`);
       if (response.ok) {
         const card = await response.json();
-        setScannedCard({ uid: card.uid, card_holder: card.card_holder, balance: card.balance, registered_at: card.registered_at });
+        setScannedCard({ uid: card.uid, holderName: card.holderName, balance: card.balance, createdAt: card.createdAt });
       } else {
         Alert.alert('Error', 'Card not found');
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to lookup card');
     }
   };
 
   const handlePay = async () => {
     if (!scannedCard || !cartItems.length) return;
-
     setLoading(true);
     setResult(null);
     try {
-      const items = cartItems.map(i => ({ productId: i.product.id, quantity: i.quantity }));
+      const items = cartItems.map(i => ({
+        productId: i.product.id,
+        quantity: i.quantity,
+        amount: i.product.price,
+      }));
       await onPay(items);
       setResult({
         type: 'success',
-        message: `Payment Approved! $${totalCost.toLocaleString()} | Remaining Balance: $${(scannedCard.balance - totalCost).toLocaleString()}`
+        message: `Payment Approved! $${totalCost.toFixed(2)} | Remaining: $${(scannedCard.balance - totalCost).toFixed(2)}`,
       });
-      // Reset cart and scanned card
-      Object.keys(cart).forEach(key => onSetCartQty(parseInt(key), 0));
+      // Clear cart by removing all items via toggle
+      cartItems.forEach(i => onToggleProduct(i.product.id));
       setScannedCard(null);
-    } catch (error) {
-      setResult({ type: 'error', message: 'Payment failed' });
+    } catch (err: any) {
+      setResult({ type: 'error', message: err?.message || 'Payment failed' });
     } finally {
       setLoading(false);
     }
@@ -106,14 +109,10 @@ export default function PaymentsScreen({
         <View style={styles.panelBody}>
           <View style={styles.productGrid}>
             {products.map(product => {
-              const inCart = cart[product.id] > 0;
+              const inCart = (cart[product.id] || 0) > 0;
               const quantity = cart[product.id] || 0;
-              
               return (
-                <View
-                  key={product.id}
-                  style={[styles.productCard, inCart && styles.productCardSelected]}
-                >
+                <View key={product.id} style={[styles.productCard, inCart && styles.productCardSelected]}>
                   <TouchableOpacity
                     style={styles.productCardContent}
                     onPress={() => !inCart && onToggleProduct(product.id)}
@@ -123,24 +122,15 @@ export default function PaymentsScreen({
                     <Text style={styles.productPrice}>${product.price.toLocaleString()}</Text>
                     <Text style={styles.productCategory}>{product.category}</Text>
                   </TouchableOpacity>
-                  
                   {inCart && (
                     <View style={styles.productQuantityControls}>
                       <TouchableOpacity
                         style={styles.quantityButton}
-                        onPress={() => {
-                          if (quantity > 1) {
-                            onSetCartQty(product.id, quantity - 1);
-                          } else {
-                            onToggleProduct(product.id);
-                          }
-                        }}
+                        onPress={() => quantity > 1 ? onSetCartQty(product.id, quantity - 1) : onToggleProduct(product.id)}
                       >
                         <Text style={styles.quantityButtonText}>−</Text>
                       </TouchableOpacity>
-                      
                       <Text style={styles.quantityText}>{quantity}</Text>
-                      
                       <TouchableOpacity
                         style={styles.quantityButton}
                         onPress={() => onSetCartQty(product.id, quantity + 1)}
@@ -153,7 +143,6 @@ export default function PaymentsScreen({
               );
             })}
           </View>
-
           {!hasSelection && (
             <Text style={styles.selectionHint}>👆 Tap products above to add them to the cart</Text>
           )}
@@ -176,19 +165,15 @@ export default function PaymentsScreen({
                 <TextInput
                   style={styles.cartQtyInput}
                   value={item.quantity.toString()}
-                  onChangeText={(val) => onSetCartQty(item.product.id, parseInt(val) || 1)}
+                  onChangeText={val => onSetCartQty(item.product.id, parseInt(val) || 1)}
                   keyboardType="numeric"
                 />
                 <Text style={styles.cartItemTotal}>${item.lineCost.toLocaleString()}</Text>
-                <TouchableOpacity
-                  style={styles.cartRemoveBtn}
-                  onPress={() => onToggleProduct(item.product.id)}
-                >
+                <TouchableOpacity style={styles.cartRemoveBtn} onPress={() => onToggleProduct(item.product.id)}>
                   <Text style={styles.cartRemoveText}>✕</Text>
                 </TouchableOpacity>
               </View>
             ))}
-
             <View style={styles.cartTotal}>
               <Text style={styles.cartTotalLabel}>Total</Text>
               <Text style={styles.cartTotalValue}>${totalCost.toLocaleString()}</Text>
@@ -209,7 +194,6 @@ export default function PaymentsScreen({
                 <Text style={styles.scanIcon}>📡</Text>
                 <Text style={styles.scanText}>Waiting for RFID card scan...</Text>
                 <Text style={styles.scanSubtext}>Or enter UID manually below</Text>
-
                 <View style={styles.manualLookup}>
                   <TextInput
                     style={styles.manualInput}
@@ -229,7 +213,7 @@ export default function PaymentsScreen({
                 <Text style={[styles.balanceValue, insufficient && styles.balanceInsufficient]}>
                   ${scannedCard.balance.toLocaleString()}
                 </Text>
-                <Text style={styles.balanceHolder}>👤 {scannedCard.card_holder}</Text>
+                <Text style={styles.balanceHolder}>👤 {scannedCard.holderName}</Text>
                 {insufficient && (
                   <Text style={styles.insufficientText}>
                     ⚠️ Insufficient balance — need ${totalCost.toLocaleString()}
@@ -253,7 +237,6 @@ export default function PaymentsScreen({
                 <Text style={styles.alertText}>{result.message}</Text>
               </View>
             )}
-
             <View style={styles.paymentSummary}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Items</Text>
@@ -261,17 +244,14 @@ export default function PaymentsScreen({
                   {cartItems.map(i => `${i.product.name}×${i.quantity}`).join(', ')}
                 </Text>
               </View>
-
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Total</Text>
                 <Text style={styles.summaryValueTotal}>${totalCost.toLocaleString()}</Text>
               </View>
-
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Card Balance</Text>
                 <Text style={styles.summaryValueSuccess}>${scannedCard!.balance.toLocaleString()}</Text>
               </View>
-
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Remaining After</Text>
                 <Text style={styles.summaryValueWarning}>
@@ -279,7 +259,6 @@ export default function PaymentsScreen({
                 </Text>
               </View>
             </View>
-
             <TouchableOpacity
               style={[styles.btnPrimary, loading && styles.btnDisabled]}
               onPress={handlePay}

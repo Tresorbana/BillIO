@@ -1,26 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { styles } from '../styles';
 import { API_BASE } from '../config';
 
 interface Card {
   uid: string;
-  card_holder: string;
+  holderName: string;
   balance: number;
-  registered_at: string;
+  createdAt: string;
 }
 
 interface TopupScreenProps {
   scannedCard: Card | null;
   setScannedCard: (card: Card | null) => void;
-  onTopup: (uid: string, amount: number) => Promise<void>;
+  onTopup: (uid: string, amount: number, holderName?: string) => Promise<void>;
 }
 
 export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: TopupScreenProps) {
-  const [cardId, setCardId] = useState('');
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [manualUid, setManualUid] = useState('');
   const [regHolder, setRegHolder] = useState('');
   const [showRegister, setShowRegister] = useState(false);
@@ -28,15 +27,15 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
   const manualLookup = async () => {
     if (!manualUid.trim()) return;
     try {
-      const response = await fetch(`${API_BASE}/api/cards/${manualUid.trim()}`);
+      const response = await fetch(`${API_BASE}/api/card/${manualUid.trim()}`);
       if (response.ok) {
         const card = await response.json();
-        setScannedCard({ uid: card.uid, card_holder: card.card_holder, balance: card.balance, registered_at: card.registered_at });
+        setScannedCard({ uid: card.uid, holderName: card.holderName, balance: card.balance, createdAt: card.createdAt });
       } else {
-        setScannedCard({ uid: manualUid.trim(), card_holder: '', balance: 0, registered_at: '' });
+        setScannedCard({ uid: manualUid.trim(), holderName: '', balance: 0, createdAt: '' });
         setShowRegister(true);
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to lookup card');
     }
   };
@@ -47,7 +46,7 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
       const response = await fetch(`${API_BASE}/api/cards/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: scannedCard.uid, cardHolder: regHolder.trim() }),
+        body: JSON.stringify({ uid: scannedCard.uid, holderName: regHolder.trim() }),
       });
       if (response.ok) {
         const data = await response.json();
@@ -57,7 +56,7 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
       } else {
         Alert.alert('Error', (await response.json()).error);
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to register card');
     }
   };
@@ -70,12 +69,11 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
     setLoading(true);
     setResult(null);
     try {
-      await onTopup(scannedCard.uid, amt);
-      setResult({ type: 'success', message: `Added $${amt.toLocaleString()} — New Balance: $${(scannedCard.balance + amt).toLocaleString()}` });
+      await onTopup(scannedCard.uid, amt, scannedCard.holderName || undefined);
+      setResult({ type: 'success', message: `Added ${amt.toLocaleString()} — New Balance: ${(scannedCard.balance + amt).toLocaleString()}` });
       setAmount('');
-      // Update local card balance
       setScannedCard({ ...scannedCard, balance: scannedCard.balance + amt });
-    } catch (error) {
+    } catch {
       setResult({ type: 'error', message: 'Top-up failed' });
     } finally {
       setLoading(false);
@@ -87,7 +85,6 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
       <Text style={styles.pageTitle}>💰 Top-Up Card</Text>
       <Text style={styles.pageSubtitle}>Add funds to an RFID card</Text>
 
-      {/* Scan Area */}
       <View style={styles.panel}>
         <View style={styles.panelHeader}>
           <Text style={styles.panelTitle}>Card Selection</Text>
@@ -98,7 +95,6 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
               <Text style={styles.scanIcon}>📡</Text>
               <Text style={styles.scanText}>Waiting for RFID card scan...</Text>
               <Text style={styles.scanSubtext}>Or enter UID manually below</Text>
-
               <View style={styles.manualLookup}>
                 <TextInput
                   style={styles.manualInput}
@@ -112,17 +108,13 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
                 </TouchableOpacity>
               </View>
             </View>
-          ) : !scannedCard.card_holder ? (
+          ) : !scannedCard.holderName ? (
             <View style={styles.scanArea}>
               <Text style={styles.scanIcon}>🔍</Text>
               <Text style={styles.scannedUid}>{scannedCard.uid}</Text>
               <Text style={styles.scanText}>Unknown Card</Text>
-
               {!showRegister ? (
-                <TouchableOpacity
-                  style={styles.btnWarning}
-                  onPress={() => setShowRegister(true)}
-                >
+                <TouchableOpacity style={styles.btnWarning} onPress={() => setShowRegister(true)}>
                   <Text style={styles.btnWarningText}>⚠️ Card not registered — Register it first</Text>
                 </TouchableOpacity>
               ) : (
@@ -144,15 +136,14 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
             <View style={styles.scanArea}>
               <Text style={styles.scanIcon}>✅</Text>
               <Text style={styles.scannedUid}>{scannedCard.uid}</Text>
-              <Text style={styles.scannedHolder}>👤 {scannedCard.card_holder}</Text>
+              <Text style={styles.scannedHolder}>👤 {scannedCard.holderName}</Text>
               <Text style={styles.scannedBalance}>Balance: ${scannedCard.balance.toLocaleString()}</Text>
             </View>
           )}
         </View>
       </View>
 
-      {/* Top-up Form */}
-      {scannedCard?.card_holder && (
+      {scannedCard?.holderName && (
         <View style={styles.panel}>
           <View style={styles.panelHeader}>
             <Text style={styles.panelTitle}>Top-Up Amount</Text>
@@ -165,7 +156,6 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
                 </Text>
               </View>
             )}
-
             <TextInput
               style={styles.input}
               placeholder="Amount ($)"
@@ -174,7 +164,6 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
               keyboardType="numeric"
               editable={!loading}
             />
-
             <TouchableOpacity
               style={[styles.btnSuccess, loading && styles.btnDisabled]}
               onPress={handleTopup}
@@ -186,13 +175,11 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
         </View>
       )}
 
-      {/* Recent Top-ups */}
       <View style={styles.panel}>
         <View style={styles.panelHeader}>
           <Text style={styles.panelTitle}>Recent Top-Ups</Text>
         </View>
         <ScrollView style={styles.panelBody}>
-          {/* Would load recent transactions here */}
           <Text style={styles.emptyText}>Recent top-ups will appear here</Text>
         </ScrollView>
       </View>

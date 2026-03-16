@@ -41,6 +41,7 @@ import {
 // Import styles
 import { styles } from './styles';
 import { API_BASE } from './config';
+import { getSocket } from './socket';
 
 interface User {
   username: string;
@@ -48,7 +49,7 @@ interface User {
 }
 
 interface Product {
-  id: number;
+  id: string;
   name: string;
   price: number;
   category: string;
@@ -62,9 +63,9 @@ interface CartItem {
 
 interface Card {
   uid: string;
-  card_holder: string;
+  holderName: string;
   balance: number;
-  registered_at: string;
+  createdAt: string;
 }
 
 export default function App() {
@@ -143,12 +144,22 @@ export default function App() {
   );
 }
 
+// Maps DB role values to display labels
+function getRoleLabel(role: string): string {
+  switch (role) {
+    case 'admin': return 'ADMIN';
+    case 'agent': return 'AGENT';
+    case 'user': return 'SALESPERSON';
+    default: return role?.toUpperCase() || 'UNKNOWN';
+  }
+}
+
 function AuthScreen({ onLogin, onBack }: { onLogin: (loginData: { token: string; username: string; role: string }) => void; onBack: () => void }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [signupRole, setSignupRole] =
-    useState<'agent' | 'cashier' | 'admin'>('agent');
+    useState<'user' | 'admin' | 'agent'>('user');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -201,8 +212,10 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (loginData: { token: string;
         alert(data.error || 'Signup failed');
         return;
       }
-     console.log('✅ Backend connected successfully - Signup response:', data);
-      onLogin(data);
+
+      // Signup returns { message } not a token — switch to login
+      alert('Account created! Please log in.');
+      setIsLogin(true);
     } catch {
       alert('Connection failed');
     } finally {
@@ -277,9 +290,9 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (loginData: { token: string;
               style={{ color: '#000', backgroundColor: '#fff' }}
               dropdownIconColor="#000"
             >
-              <Picker.Item label="Agent" value="agent" color="#000" />
-              <Picker.Item label="Cashier" value="cashier" color="#000" />
               <Picker.Item label="Admin" value="admin" color="#000" />
+              <Picker.Item label="Salesperson" value="user" color="#000" />
+              <Picker.Item label="Agent" value="agent" color="#000" />
             </Picker>
           </View>
         )}
@@ -309,20 +322,66 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
   const [currentView, setCurrentView] = useState<string>(
     user.role === 'agent'
       ? 'topup'
-      : user.role === 'cashier'
+      : user.role === 'user'
       ? 'payment'
       : 'dashboard'
   );
 
   const [scannedCard, setScannedCard] = useState<Card | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<{ [key: number]: number }>({});
-  const [isOnline, setIsOnline] = useState(true);
+  const [cart, setCart] = useState<{ [key: string]: number }>({});
+  const [isOnline, setIsOnline] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     loadProducts();
-    setIsOnline(true);
+
+    const socket = getSocket();
+    socket.connect();
+
+    socket.on('connect', () => setIsOnline(true));
+    socket.on('disconnect', () => setIsOnline(false));
+
+    // Card tapped on RFID reader — auto-populate scannedCard
+    socket.on('card-status', (data: { uid: string; holderName: string | null; balance: number; status: string; present: boolean; ts: number }) => {
+      if (data.present) {
+        setScannedCard({
+          uid: data.uid,
+          holderName: data.holderName ?? '',
+          balance: data.balance,
+          createdAt: '',
+        });
+      } else {
+        setScannedCard(null);
+      }
+    });
+
+    // Balance updated (after topup/payment) — sync local card state
+    socket.on('card-balance', (data: { uid: string; balance: number }) => {
+      setScannedCard(prev =>
+        prev?.uid === data.uid ? { ...prev, balance: data.balance } : prev
+      );
+    });
+
+    // Card removed from reader
+    socket.on('card-removed', () => setScannedCard(null));
+
+    // Payment confirmed by backend
+    socket.on('payment-success', (data: { uid: string; balanceAfter: number }) => {
+      setScannedCard(prev =>
+        prev?.uid === data.uid ? { ...prev, balance: data.balanceAfter } : prev
+      );
+    });
+
+    return () => {
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('card-status');
+      socket.off('card-balance');
+      socket.off('card-removed');
+      socket.off('payment-success');
+      socket.disconnect();
+    };
   }, []);
 
   const loadProducts = async () => {
@@ -334,50 +393,52 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
     }
   };
 
-  const handleTopup = async (uid: string, amount: number) => {
+  const handleTopup = async (uid: string, amount: number, holderName?: string) => {
     const response = await fetch(`${API_BASE}/topup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid, amount })
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ uid, amount, holderName })
     });
 
     if (!response.ok) throw new Error('Top-up failed');
   };
 
-  const handlePay = async (items: { productId: number; quantity: number }[]) => {
-    const response = await fetch(`${API_BASE}/pay`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: scannedCard?.uid, items })
-    });
+  const handlePay = async (items: { productId: string; quantity: number; amount: number }[]) => {
+    // Send one request per cart line — use amount directly since backend PRODUCTS lookup is unreliable
+    for (const item of items) {
+      const totalLineAmount = item.amount * item.quantity;
+      const response = await fetch(`${API_BASE}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          uid: scannedCard?.uid,
+          amount: totalLineAmount,
+          description: `Purchase x${item.quantity}`,
+        })
+      });
 
-    const data = await response.json();
-
-    if (!response.ok || data.status !== 'approved') {
-      throw new Error(data.error || 'Payment failed');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Payment failed');
     }
   };
 
-  const toggleProduct = (productId: number) => {
+  const toggleProduct = (productId: string) => {
     setCart(prev => {
       const newCart = { ...prev };
-
       if (newCart[productId]) delete newCart[productId];
       else newCart[productId] = 1;
-
       return newCart;
     });
   };
 
-  const setCartQty = (productId: number, qty: number) => {
+  const setCartQty = (productId: string, qty: number) => {
     setCart(prev => ({ ...prev, [productId]: Math.max(1, qty) }));
   };
 
   const getCartItems = (): CartItem[] => {
     return Object.entries(cart)
       .map(([id, qty]) => {
-        const product = products.find(p => p.id === Number(id));
-
+        const product = products.find(p => String(p.id) === id);
         return product
           ? { product, quantity: qty, lineCost: product.price * qty }
           : null;
@@ -423,6 +484,13 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
             products={products}
             onLoadProducts={loadProducts}
             setProducts={setProducts}
+            readonly={user.role === 'user'}
+            cart={cart}
+            onToggleProduct={toggleProduct}
+            onSetCartQty={setCartQty}
+            getCartItems={getCartItems}
+            getCartTotal={getCartTotal}
+            onGoToPayment={() => setCurrentView('payment')}
           />
         );
 
@@ -459,10 +527,11 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
         { key: 'cards', label: 'Cards', IconComponent: CardsIcon }
       );
     }
-    // Cashier gets only payment
-    else if (user.role === 'cashier') {
+    // Salesperson (user) gets payment and products
+    else if (user.role === 'user') {
       items.push(
-        { key: 'payment', label: 'Payment', IconComponent: PaymentIcon }
+        { key: 'payment', label: 'Payment', IconComponent: PaymentIcon },
+        { key: 'products', label: 'Products', IconComponent: ProductsIcon }
       );
     }
     
@@ -535,7 +604,7 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
             <View style={styles.userDetails}>
               <Text style={styles.userName}>{user.username}</Text>
               <Text style={[styles.userRole, user.role ? styles[`userRole${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` as keyof typeof styles] : styles.userRole]}>
-                {user.role?.toUpperCase() || 'UNKNOWN'}
+                {getRoleLabel(user.role)}
               </Text>
             </View>
           </View>

@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const User = require('../models/User');
+const { User } = require('../../database/entities');
 
 // Connect to MongoDB
 async function connectDB() {

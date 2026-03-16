@@ -3,10 +3,8 @@ const mqtt = require('mqtt');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const path = require('path');
-const { icons } = require('lucide');
 const jwt = require('jsonwebtoken');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
@@ -15,6 +13,9 @@ const connectDB = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
 const productRoutesModule = require('./routes/productRoutes');
 const productRoutes = productRoutesModule.router;
+
+// Import entities from database layer
+const { Card, Transaction, Product } = require('../database/entities');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,9 +49,9 @@ const authenticate = (req, res, next) => {
 };
 
 const PORT = process.env.PORT1 || 8228;
-const TEAM_ID = "vikings";
-// const MQTT_BROKER = "mqtt://157.173.101.159:1883";
-const MQTT_BROKER = "mqtt://broker.hivemq.com:1883";
+const TEAM_ID = "1nt3ern4l_53rv3r_3rr0r";
+const MQTT_BROKER = "mqtt://157.173.101.159:1883";
+// const MQTT_BROKER = "mqtt://broker.hivemq.com:1883";
 // const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@rfid-tap-pay.igoregv.mongodb.net/?appName=rfid-tap-paymongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@rfid-tap-pay.igoregv.mongodb.net/?appName=rfid-tap-pay";
 const MONGO_URI = process.env.MONGODB_URI || "mongodb+srv://irakozep03_db_user:s5OdoCJx8Gq0fOjF@tap-pay.2j0w4vo.mongodb.net/?appName=tap-pay";
 const SECRET_KEY = process.env.JWT_SECRET || 'secret123';
@@ -58,44 +59,14 @@ const SECRET_KEY = process.env.JWT_SECRET || 'secret123';
 // MongoDB Connection
 connectDB();
 
-// Card Schema
-const cardSchema = new mongoose.Schema({
-  uid: { type: String, required: true, unique: true },
-  holderName: { type: String, required: true },
-  balance: { type: Number, default: 0 },
-  lastTopup: { type: Number, default: 0 },
-  passcode: { type: String, default: null }, // 6-digit passcode (hashed)
-  passcodeSet: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-const Card = mongoose.model('Card', cardSchema);
-
 // Passcode helper functions
 async function hashPasscode(passcode) {
-  const saltRounds = 10;
-  return await bcrypt.hash(passcode, saltRounds);
+  return await bcrypt.hash(passcode, 10);
 }
 
 async function verifyPasscode(inputPasscode, hashedPasscode) {
   return await bcrypt.compare(inputPasscode, hashedPasscode);
 }
-
-// Transaction Schema
-const transactionSchema = new mongoose.Schema({
-  uid: { type: String, required: true, index: true },
-  holderName: { type: String, required: true },
-  userId: { type: String, required: true }, // username of the user who performed the transaction
-  type: { type: String, enum: ['topup', 'debit'], default: 'topup' },
-  amount: { type: Number, required: true },
-  balanceBefore: { type: Number, required: true },
-  balanceAfter: { type: Number, required: true },
-  description: { type: String },
-  timestamp: { type: Date, default: Date.now }
-});
-
-const Transaction = mongoose.model('Transaction', transactionSchema);
 
 // Topics
 const TOPIC_STATUS = `rfid/${TEAM_ID}/card/status`;
@@ -347,7 +318,7 @@ app.post('/pay', authenticate, async (req, res) => {
     let payAmount;
     let payDescription;
     if (productId) {
-      const product = PRODUCTS.find(p => p.id === productId);
+      const product = await Product.findOne({ id: productId });
       if (!product) {
         return res.status(400).json({ error: 'Invalid product ID' });
       }
@@ -655,5 +626,6 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend server running on http://0.0.0.0:${PORT}`);
-  console.log(`Access from: http://157.173.101.159:${PORT}`);
+  console.log(`Access from: http://10.12.72.106:${PORT}`);
 });
+

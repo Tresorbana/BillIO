@@ -5,14 +5,12 @@ import { API_BASE } from '../config';
 
 interface Card {
   uid: string;
-  card_holder: string;
+  holderName: string;
   balance: number;
-  registered_at: string;
+  createdAt: string;
 }
 
-interface CardsScreenProps {}
-
-export default function CardsScreen({}: CardsScreenProps) {
+export default function CardsScreen() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,23 +22,9 @@ export default function CardsScreen({}: CardsScreenProps) {
     try {
       const response = await fetch(`${API_BASE}/api/cards`);
       const data = await response.json();
-      setCards(data);
-    } catch (error) {
-      // Mock data fallback
-      setCards([
-        {
-          uid: 'ABC123',
-          card_holder: 'John Doe',
-          balance: 150,
-          registered_at: new Date().toISOString()
-        },
-        {
-          uid: 'DEF456',
-          card_holder: 'Jane Smith',
-          balance: 75,
-          registered_at: new Date().toISOString()
-        }
-      ]);
+      setCards(Array.isArray(data) ? data : []);
+    } catch {
+      setCards([]);
     } finally {
       setLoading(false);
     }
@@ -75,11 +59,11 @@ export default function CardsScreen({}: CardsScreenProps) {
               {cards.map(card => (
                 <View key={card.uid} style={styles.tableRow}>
                   <Text style={styles.tableCellMono}>{card.uid}</Text>
-                  <Text style={styles.tableCell}>{card.card_holder}</Text>
+                  <Text style={styles.tableCell}>{card.holderName}</Text>
                   <Text style={[styles.tableCell, styles.textSuccess]}>
                     ${card.balance.toLocaleString()}
                   </Text>
-                  <Text style={styles.tableCell}>{new Date(card.registered_at).toLocaleString()}</Text>
+                  <Text style={styles.tableCell}>{new Date(card.createdAt).toLocaleString()}</Text>
                 </View>
               ))}
             </View>

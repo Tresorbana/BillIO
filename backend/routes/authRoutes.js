@@ -10,7 +10,8 @@ router.post('/signup', async (req, res) => {
     await UserService.createUser(username, password, role || 'user');
     res.json({ message: 'User created' });
   } catch (err) {
-    res.status(400).json({ error: 'User exists or error' });
+    console.error('Signup error:', err.message);
+    res.status(400).json({ error: err.message || 'Signup failed' });
   }
 });
 

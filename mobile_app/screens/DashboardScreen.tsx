@@ -9,6 +9,7 @@ export default function DashboardScreen({ token }: { token: string | null }) {
     paymentsToday: { total: 0, count: 0 },
     activeCards: 0,
     totalBalance: 0,
+    totalCards: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,15 +30,22 @@ export default function DashboardScreen({ token }: { token: string | null }) {
       ]);
       const statsData = await statsRes.json();
       const txData = await txRes.json();
-      setStats(statsData);
-      setRecentTransactions(txData.slice(0, 15));
+      setStats({
+        topupsToday: statsData.topupsToday ?? { total: 0, count: 0 },
+        paymentsToday: statsData.paymentsToday ?? { total: 0, count: 0 },
+        activeCards: statsData.activeCards ?? 0,
+        totalBalance: statsData.totalBalance ?? 0,
+        totalCards: statsData.totalCards ?? statsData.activeCards ?? 0,
+      });
+      setRecentTransactions(Array.isArray(txData) ? txData.slice(0, 15) : []);
     } catch (error) {
       console.error('Dashboard load error:', error);
       setStats({
-        topupsToday: { total: 1250, count: 8 },
-        paymentsToday: { total: 890, count: 12 },
-        activeCards: 45,
-        totalBalance: 15750,
+        topupsToday: { total: 0, count: 0 },
+        paymentsToday: { total: 0, count: 0 },
+        activeCards: 0,
+        totalBalance: 0,
+        totalCards: 0
       });
     } finally {
       setLoading(false);
@@ -73,7 +81,13 @@ export default function DashboardScreen({ token }: { token: string | null }) {
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{stats.activeCards}</Text>
           <Text style={styles.statLabel}>Active Cards</Text>
-          <Text style={styles.statSub}>Registered cards</Text>
+          <Text style={styles.statSub}>Balance &gt; 0</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{stats.totalCards}</Text>
+          <Text style={styles.statLabel}>Total Cards</Text>
+          <Text style={styles.statSub}>Registered</Text>
         </View>
 
         <View style={styles.statCard}>
@@ -100,6 +114,7 @@ export default function DashboardScreen({ token }: { token: string | null }) {
                 <View key={tx._id} style={styles.tableRow}>
                   <Text style={styles.tableCell}>{new Date(tx.timestamp).toLocaleString()}</Text>
                   <View style={[styles.badge, tx.type === 'topup' ? styles.badgeTopup : styles.badgePayment]}>
+
                     <Text style={styles.badgeText}>{tx.type.toUpperCase()}</Text>
                   </View>
                   <Text style={styles.tableCellMono}>{tx.uid}</Text>

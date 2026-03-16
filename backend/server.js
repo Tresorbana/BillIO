@@ -14,8 +14,9 @@ const authRoutes = require('./routes/authRoutes');
 const productRoutesModule = require('./routes/productRoutes');
 const productRoutes = productRoutesModule.router;
 
-// Import entities from database layer
-const { Card, Transaction, Product } = require('../database/entities');
+// Import entities from backend/entities (same mongoose instance)
+const { Card, Transaction, Product } = require('./entities');
+const mongoose = require('mongoose');
 
 const app = express();
 const server = http.createServer(app);

@@ -1,4 +1,4 @@
-const { User } = require('../../database/entities');
+const { User } = require('../entities');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 

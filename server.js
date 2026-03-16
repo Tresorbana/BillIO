@@ -4,7 +4,7 @@
 const CONFIG = {
   HOST: "0.0.0.0",
   MQTT_HOST: "mqtt://157.173.101.159:1883",
-  PORT: 5000,
+  PORT: 6700,
   TEAM_ID: "1nt3rn4l_53rv3r_3rr0r",
 };
 

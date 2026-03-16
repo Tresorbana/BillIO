@@ -40,12 +40,11 @@ import {
 
 // Import styles
 import { styles } from './styles';
-
-const API_BASE = 'http://10.12.72.106:6700';
+import { API_BASE } from './config';
 
 interface User {
   username: string;
-  role: 'agent' | 'cashier' | 'admin';
+  role: string;
 }
 
 interface Product {
@@ -70,6 +69,7 @@ interface Card {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -85,9 +85,11 @@ export default function App() {
   const checkAuth = async () => {
     try {
       const storedUser = await AsyncStorage.getItem('user');
-      if (storedUser) {
+      const storedToken = await AsyncStorage.getItem('token');
+      if (storedUser && storedToken) {
         const userData = JSON.parse(storedUser);
         setUser(userData);
+        setToken(storedToken);
         setIsAuthenticated(true);
       }
     } catch (error) {
@@ -97,11 +99,14 @@ export default function App() {
     }
   };
 
-  async function handleLogin(userData: User) {
+  async function handleLogin(loginData: { token: string; username: string; role: string }) {
+    const userData = { username: loginData.username, role: loginData.role };
     setUser(userData);
+    setToken(loginData.token);
     setIsAuthenticated(true);
     setShowAuth(false);
     await AsyncStorage.setItem('user', JSON.stringify(userData));
+    await AsyncStorage.setItem('token', loginData.token);
   }
 
   async function handleLogout() {
@@ -130,7 +135,7 @@ export default function App() {
           ) : !isAuthenticated && showAuth ? (
             <AuthScreen onLogin={handleLogin} onBack={() => setShowAuth(false)} />
           ) : (
-            <MainApp user={user!} onLogout={handleLogout} />
+            <MainApp user={user!} token={token} onLogout={handleLogout} />
           )}
         </NavigationContainer>
       </GestureHandlerRootView>
@@ -138,7 +143,7 @@ export default function App() {
   );
 }
 
-function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack: () => void }) {
+function AuthScreen({ onLogin, onBack }: { onLogin: (loginData: { token: string; username: string; role: string }) => void; onBack: () => void }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -165,6 +170,7 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
         return;
       }
 
+      console.log('✅ Backend connected successfully - Login response:', data);
       onLogin(data);
     } catch {
       alert('Connection failed');
@@ -195,7 +201,7 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
         alert(data.error || 'Signup failed');
         return;
       }
-
+     console.log('✅ Backend connected successfully - Signup response:', data);
       onLogin(data);
     } catch {
       alert('Connection failed');
@@ -268,10 +274,12 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
             <Picker
               selectedValue={signupRole}
               onValueChange={(v) => setSignupRole(v)}
+              style={{ color: '#000', backgroundColor: '#fff' }}
+              dropdownIconColor="#000"
             >
-              <Picker.Item label="Agent" value="agent" />
-              <Picker.Item label="Cashier" value="cashier" />
-              <Picker.Item label="Admin" value="admin" />
+              <Picker.Item label="Agent" value="agent" color="#000" />
+              <Picker.Item label="Cashier" value="cashier" color="#000" />
+              <Picker.Item label="Admin" value="admin" color="#000" />
             </Picker>
           </View>
         )}
@@ -295,7 +303,7 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
   );
 }
 
-function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
+function MainApp({ user, token, onLogout }: { user: User; token: string | null; onLogout: () => void }) {
   const insets = useSafeAreaInsets();
 
   const [currentView, setCurrentView] = useState<string>(
@@ -383,7 +391,7 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <DashboardScreen />;
+        return <DashboardScreen token={token} />;
 
       case 'topup':
         return (
@@ -425,7 +433,7 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         return <CardsScreen />;
 
       default:
-        return <DashboardScreen />;
+        return <DashboardScreen token={token}/>;
     }
   };
 
@@ -526,8 +534,8 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
             </View>
             <View style={styles.userDetails}>
               <Text style={styles.userName}>{user.username}</Text>
-              <Text style={[styles.userRole, styles[`userRole${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` as keyof typeof styles]]}>
-                {user.role.toUpperCase()}
+              <Text style={[styles.userRole, user.role ? styles[`userRole${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` as keyof typeof styles] : styles.userRole]}>
+                {user.role?.toUpperCase() || 'UNKNOWN'}
               </Text>
             </View>
           </View>

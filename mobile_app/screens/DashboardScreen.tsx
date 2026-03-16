@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { styles } from '../styles';
+import { API_BASE } from '../config';
 
-const API_BASE = 'http://10.12.72.106:6700';
-
-export default function DashboardScreen() {
+export default function DashboardScreen({ token }: { token: string | null }) {
   const [stats, setStats] = useState({
     topupsToday: { total: 0, count: 0 },
     paymentsToday: { total: 0, count: 0 },
@@ -21,14 +20,19 @@ export default function DashboardScreen() {
   const loadDashboardData = async () => {
     try {
       const [statsRes, txRes] = await Promise.all([
-        fetch(`${API_BASE}/api/dashboard`),
-        fetch(`${API_BASE}/api/transactions`),
+        fetch(`${API_BASE}/api/dashboard`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/api/transactions`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
       ]);
       const statsData = await statsRes.json();
       const txData = await txRes.json();
       setStats(statsData);
       setRecentTransactions(txData.slice(0, 15));
     } catch (error) {
+      console.error('Dashboard load error:', error);
       setStats({
         topupsToday: { total: 1250, count: 8 },
         paymentsToday: { total: 890, count: 12 },
@@ -93,8 +97,8 @@ export default function DashboardScreen() {
                 <Text style={styles.tableHeaderCell}>Amount</Text>
               </View>
               {recentTransactions.map(tx => (
-                <View key={tx.id} style={styles.tableRow}>
-                  <Text style={styles.tableCell}>{new Date(tx.created_at).toLocaleString()}</Text>
+                <View key={tx._id} style={styles.tableRow}>
+                  <Text style={styles.tableCell}>{new Date(tx.timestamp).toLocaleString()}</Text>
                   <View style={[styles.badge, tx.type === 'topup' ? styles.badgeTopup : styles.badgePayment]}>
                     <Text style={styles.badgeText}>{tx.type.toUpperCase()}</Text>
                   </View>

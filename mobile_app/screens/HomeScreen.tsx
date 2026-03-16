@@ -9,7 +9,7 @@ import {
 import { styles } from '../styles';
 import CornerAccents from '../components/CornerAccents';
 
-const API_BASE = 'http://10.12.72.106:6700';
+import { API_BASE } from '../config';
 
 interface HomeScreenProps {
   onShowAuth: () => void;

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { styles } from '../styles';
-
-const API_BASE = 'http://10.12.72.106:6700';
+import { API_BASE } from '../config';
 
 interface Card {
   uid: string;

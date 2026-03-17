@@ -1,214 +1,221 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { styles } from '../styles';
+import { API_BASE } from '../config';
+import { ProductsIcon, CheckIcon, CardsIcon } from '../components/Icons';
 
-const API_BASE = 'http://10.12.72.106:6700';
-
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  category: string;
-}
+interface Product { id: string; name: string; price: number; category: string; }
+interface CartItem { product: Product; quantity: number; lineCost: number; }
 
 interface ProductsScreenProps {
   products: Product[];
   onLoadProducts: () => Promise<void>;
   setProducts: (products: Product[]) => void;
+  token?: string | null;
+  readonly?: boolean;
+  cart?: { [key: string]: number };
+  onToggleProduct?: (id: string) => void;
+  onSetCartQty?: (id: string, qty: number) => void;
+  getCartItems?: () => CartItem[];
+  getCartTotal?: () => number;
+  onGoToPayment?: () => void;
 }
 
 export default function ProductsScreen({
-  products,
-  onLoadProducts,
-  setProducts
+  products, onLoadProducts, readonly = false, token,
+  cart = {}, onToggleProduct, onSetCartQty, getCartItems, getCartTotal, onGoToPayment,
 }: ProductsScreenProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'General' });
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    onLoadProducts();
-  }, []);
+  useEffect(() => { onLoadProducts(); }, []);
+
+  const cartItems = getCartItems ? getCartItems() : [];
+  const cartTotal = getCartTotal ? getCartTotal() : 0;
 
   const addProduct = async () => {
     const name = newProduct.name.trim();
     const price = parseFloat(newProduct.price);
     const category = newProduct.category.trim();
-
-    if (!name || !price || price <= 0) {
-      Alert.alert('Error', 'Name and valid price required');
-      return;
-    }
-
+    if (!name || !price || price <= 0) return Alert.alert('Error', 'Name and valid price required');
+    const id = name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now();
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/products`, {
+      const res = await fetch(`${API_BASE}/api/products`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, price, category }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ id, name, price, category }),
       });
-
-      if (response.ok) {
+      if (res.ok) {
         await onLoadProducts();
         setNewProduct({ name: '', price: '', category: 'General' });
         setShowAddForm(false);
       } else {
-        Alert.alert('Error', (await response.json()).error);
+        Alert.alert('Error', (await res.json()).error);
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to add product');
     } finally {
       setLoading(false);
     }
   };
 
-  const updateProduct = async (id: number, field: string, value: string | number) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/products/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: value }),
-      });
-
-      if (response.ok) {
-        await onLoadProducts();
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update product');
-    }
-  };
-
-  const deleteProduct = async (id: number) => {
-    Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await fetch(`${API_BASE}/api/products/${id}`, { method: 'DELETE' });
-              if (response.ok) {
-                await onLoadProducts();
-              }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete product');
-            }
+  const deleteProduct = async (id: string) => {
+    Alert.alert('Delete Product', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            const res = await fetch(`${API_BASE}/api/products/${id}`, {
+              method: 'DELETE',
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (res.ok) await onLoadProducts();
+          } catch {
+            Alert.alert('Error', 'Failed to delete product');
           }
         }
-      ]
-    );
+      },
+    ]);
   };
 
   return (
-    <ScrollView style={styles.screenContainer}>
-      <Text style={styles.pageTitle}>📦 Products</Text>
-      <Text style={styles.pageSubtitle}>Manage products and services</Text>
+    <View style={{ flex: 1, backgroundColor: '#01010d' }}>
 
-      {/* Add New Product */}
-      <View style={styles.panel}>
-        <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>Add New Product</Text>
+      {/* ── Fixed header ── */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, backgroundColor: '#01010d' }}>
+        <View style={styles.pageTitleRow}>
+          <ProductsIcon size={22} color="#6366f1" />
+          <Text style={styles.pageTitle}>Products</Text>
         </View>
-        <View style={styles.panelBody}>
-          <TouchableOpacity
-            style={styles.btnSuccess}
-            onPress={() => setShowAddForm(!showAddForm)}
-          >
-            <Text style={styles.btnSuccessText}>{showAddForm ? '− Cancel' : '+ Add Product'}</Text>
-          </TouchableOpacity>
 
-          {showAddForm && (
-            <View style={styles.addForm}>
-              <TextInput
-                style={styles.input}
-                placeholder="Product Name"
-                value={newProduct.name}
-                onChangeText={(name) => setNewProduct({...newProduct, name})}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Price ($)"
-                value={newProduct.price}
-                onChangeText={(price) => setNewProduct({...newProduct, price})}
-                keyboardType="decimal-pad"
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Category"
-                value={newProduct.category}
-                onChangeText={(category) => setNewProduct({...newProduct, category})}
-              />
-              <TouchableOpacity
-                style={[styles.btnSuccess, loading && styles.btnDisabled]}
-                onPress={addProduct}
-                disabled={loading}
-              >
-                <Text style={styles.btnSuccessText}>+ Add Product</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* All Products */}
-      <View style={styles.panel}>
-        <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>All Products</Text>
-        </View>
-        <ScrollView style={styles.panelBody}>
-          {products.length > 0 ? (
-            <View style={styles.dataTable}>
-              <View style={styles.tableHeader}>
-                <Text style={styles.tableHeaderCell}>ID</Text>
-                <Text style={styles.tableHeaderCell}>Name</Text>
-                <Text style={styles.tableHeaderCell}>Price</Text>
-                <Text style={styles.tableHeaderCell}>Category</Text>
-                <Text style={styles.tableHeaderCell}>Actions</Text>
+        {/* Cart bar — readonly with items */}
+        {readonly && cartItems.length > 0 && (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            backgroundColor: '#0a0a12', borderWidth: 1, borderColor: '#6366f1',
+            padding: 12, marginTop: 8,
+          }}>
+            <Text style={{ color: '#fff', fontSize: 13 }}>
+              {cartItems.length} item(s) — ${(cartTotal ?? 0).toLocaleString()}
+            </Text>
+            <TouchableOpacity style={styles.btnPrimary} onPress={onGoToPayment}>
+              <View style={styles.iconRow}>
+                <CardsIcon size={13} color="#fff" />
+                <Text style={[styles.btnPrimaryText, { marginLeft: 6, fontSize: 13 }]}>Pay</Text>
               </View>
-              {products.map(product => (
-                <View key={product.id} style={styles.tableRow}>
-                  <Text style={styles.tableCell}>{product.id}</Text>
-                  <TextInput
-                    style={styles.editableCell}
-                    value={product.name}
-                    onChangeText={(value) => updateProduct(product.id, 'name', value)}
-                  />
-                  <TextInput
-                    style={styles.editableCell}
-                    value={product.price.toString()}
-                    onChangeText={(value) => updateProduct(product.id, 'price', parseFloat(value) || 0)}
-                    keyboardType="decimal-pad"
-                  />
-                  <TextInput
-                    style={styles.editableCell}
-                    value={product.category}
-                    onChangeText={(value) => updateProduct(product.id, 'category', value)}
-                  />
-                  <View style={styles.inlineActions}>
-                    <TouchableOpacity
-                      style={styles.btnPrimarySmall}
-                      onPress={() => updateProduct(product.id, 'name', product.name)}
-                    >
-                      <Text style={styles.btnPrimarySmallText}>Save</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.btnDangerSmall}
-                      onPress={() => deleteProduct(product.id)}
-                    >
-                      <Text style={styles.btnDangerSmallText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptyText}>No products yet</Text>
-          )}
-        </ScrollView>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Add product form — admin only */}
+        {!readonly && (
+          <View style={{
+            backgroundColor: '#0a0a12', borderWidth: 1, borderColor: '#1f2937',
+            marginTop: 8,
+          }}>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 }}
+              onPress={() => setShowAddForm(!showAddForm)}
+            >
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+                {showAddForm ? 'Cancel' : '+ Add New Product'}
+              </Text>
+              <Text style={{ color: '#6366f1', fontSize: 18 }}>{showAddForm ? '−' : '+'}</Text>
+            </TouchableOpacity>
+
+            {showAddForm && (
+              <View style={{ paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderTopColor: '#1f2937' }}>
+                <TextInput
+                  style={[styles.input, { marginTop: 12, marginBottom: 8 }]}
+                  placeholder="Product Name"
+                  placeholderTextColor="#555"
+                  value={newProduct.name}
+                  onChangeText={name => setNewProduct({ ...newProduct, name })}
+                />
+                <TextInput
+                  style={[styles.input, { marginBottom: 8 }]}
+                  placeholder="Price ($)"
+                  placeholderTextColor="#555"
+                  value={newProduct.price}
+                  onChangeText={price => setNewProduct({ ...newProduct, price })}
+                  keyboardType="decimal-pad"
+                />
+                <TextInput
+                  style={[styles.input, { marginBottom: 12 }]}
+                  placeholder="Category"
+                  placeholderTextColor="#555"
+                  value={newProduct.category}
+                  onChangeText={category => setNewProduct({ ...newProduct, category })}
+                />
+                <TouchableOpacity
+                  style={[styles.btnSuccess, loading && styles.btnDisabled]}
+                  onPress={addProduct}
+                  disabled={loading}
+                >
+                  <Text style={styles.btnSuccessText}>{loading ? 'Adding...' : 'Add Product'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
       </View>
-    </ScrollView>
+
+      {/* ── Scrollable products grid ── */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingTop: 8 }}>
+        {products.length > 0 ? (
+          <View style={styles.productGrid}>
+            {products.map(product => {
+              const qty = cart[product.id] || 0;
+              const inCart = qty > 0;
+              return (
+                <View key={product.id} style={[styles.productCard, inCart && styles.productCardSelected]}>
+                  <View style={styles.productCardContent}>
+                    {inCart && (
+                      <View style={styles.productCheckIcon}>
+                        <CheckIcon size={16} color="#6366f1" />
+                      </View>
+                    )}
+                    <Text style={styles.productName}>{product.name}</Text>
+                    <Text style={styles.productPrice}>${(product.price ?? 0).toLocaleString()}</Text>
+                    <Text style={styles.productCategory}>{product.category}</Text>
+                  </View>
+
+                  {readonly && onToggleProduct && onSetCartQty ? (
+                    inCart ? (
+                      <View style={styles.productQuantityControls}>
+                        <TouchableOpacity style={styles.quantityButton} onPress={() => qty > 1 ? onSetCartQty(product.id, qty - 1) : onToggleProduct(product.id)}>
+                          <Text style={styles.quantityButtonText}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.quantityText}>{qty}</Text>
+                        <TouchableOpacity style={styles.quantityButton} onPress={() => onSetCartQty(product.id, qty + 1)}>
+                          <Text style={styles.quantityButtonText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={styles.btnPrimary} onPress={() => onToggleProduct(product.id)}>
+                        <Text style={styles.btnPrimaryText}>+ Add</Text>
+                      </TouchableOpacity>
+                    )
+                  ) : !readonly ? (
+                    <View style={styles.inlineActions}>
+                      <TouchableOpacity style={styles.btnDangerSmall} onPress={() => deleteProduct(product.id)}>
+                        <Text style={styles.btnDangerSmallText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>No products yet</Text>
+        )}
+      </ScrollView>
+    </View>
   );
 }

@@ -44,7 +44,6 @@ mobileHeaderGrandTitle: {
   mainContent: {
     flex: 1,
     backgroundColor: '#01010d',
-    padding: 20,
     marginTop: 60,
   },
 
@@ -74,14 +73,21 @@ mobileHeaderGrandTitle: {
     color: '#fff',
   },
   brand: {
-    fontFamily: 'Orbitron_700Bold', 
+    fontFamily: 'Orbitron_700Bold',
+    fontSize: 22,
+    color: '#fff',
+    letterSpacing: 2,
+  },
+  brandAccent: {
+    fontFamily: 'Orbitron_700Bold',
     fontSize: 22,
     color: '#6366f1',
-    letterSpacing: 1.5,
+    letterSpacing: 2,
   },
   titleRest: {
-    color: '#cbd5e1',
-    fontSize: 14,
+    color: '#555580',
+    fontSize: 13,
+    letterSpacing: 0.5,
   },
   mobileHeaderRight: {
     flexDirection: 'row',
@@ -428,16 +434,25 @@ mobileHeaderGrandTitle: {
     backgroundColor: '#01010d',
     padding: 20,
   },
+  pageTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
   pageTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
   },
   pageSubtitle: {
     fontSize: 16,
     color: '#9ca3af',
     marginBottom: 32,
+  },
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
   // Loading
@@ -652,10 +667,10 @@ mobileHeaderGrandTitle: {
     backgroundColor: '#161b22',
     borderRadius: 0,
     marginBottom: 20,
+    gap: 12,
   },
   scanIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+    marginBottom: 4,
   },
   scanText: {
     fontSize: 18,
@@ -768,6 +783,11 @@ mobileHeaderGrandTitle: {
   },
   productCardContent: {
     padding: 16,
+  },
+  productCheckIcon: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
   },
   productCheck: {
     fontSize: 18,
@@ -1044,7 +1064,7 @@ mobileHeaderGrandTitle: {
     marginTop: 20,
   },
   homeTitle: {
-    fontSize: 48,
+    fontSize: 52,
     fontWeight: 'bold',
     color: '#fff',
     textAlign: 'center',

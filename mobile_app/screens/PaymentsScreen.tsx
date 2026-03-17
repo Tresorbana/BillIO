@@ -1,296 +1,264 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { styles } from '../styles';
+import {
+  PaymentIcon, RfidIcon, CheckIcon, XIcon, UserIcon, CartIcon, ArrowUpIcon, WarningIcon
+} from '../components/Icons';
 
-const API_BASE = 'http://10.12.72.106:6700';
-
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  category: string;
-}
-
-interface CartItem {
-  product: Product;
-  quantity: number;
-  lineCost: number;
-}
-
-interface Card {
-  uid: string;
-  card_holder: string;
-  balance: number;
-  registered_at: string;
-}
+interface Product { id: string; name: string; price: number; category: string; }
+interface CartItem { product: Product; quantity: number; lineCost: number; }
+interface Card { uid: string; holderName: string; balance: number; createdAt: string; }
 
 interface PaymentsScreenProps {
   products: Product[];
-  cart: {[key: number]: number};
+  cart: { [key: string]: number };
   scannedCard: Card | null;
   setScannedCard: (card: Card | null) => void;
-  onToggleProduct: (id: number) => void;
-  onSetCartQty: (id: number, qty: number) => void;
-  onPay: (items: {productId: number, quantity: number}[]) => Promise<void>;
+  onToggleProduct: (id: string) => void;
+  onSetCartQty: (id: string, qty: number) => void;
+  onPay: (items: { productId: string; quantity: number; amount: number }[]) => Promise<void>;
   getCartItems: () => CartItem[];
   getCartTotal: () => number;
 }
 
 export default function PaymentsScreen({
-  products,
-  cart,
-  scannedCard,
-  setScannedCard,
-  onToggleProduct,
-  onSetCartQty,
-  onPay,
-  getCartItems,
-  getCartTotal
+  products, cart, scannedCard, setScannedCard,
+  onToggleProduct, onSetCartQty, onPay, getCartItems, getCartTotal,
 }: PaymentsScreenProps) {
-  const [manualUid, setManualUid] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const cartItems = getCartItems();
-  const totalCost = getCartTotal();
-  const hasSelection = cartItems.length > 0;
-  const canPay = hasSelection && scannedCard?.card_holder && scannedCard.balance >= totalCost;
-  const insufficient = hasSelection && scannedCard?.card_holder && scannedCard.balance < totalCost;
-
-  const manualLookup = async () => {
-    if (!manualUid.trim()) return;
-    try {
-      const response = await fetch(`${API_BASE}/api/cards/${manualUid.trim()}`);
-      if (response.ok) {
-        const card = await response.json();
-        setScannedCard({ uid: card.uid, card_holder: card.card_holder, balance: card.balance, registered_at: card.registered_at });
-      } else {
-        Alert.alert('Error', 'Card not found');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to lookup card');
-    }
-  };
+  const cartTotal = getCartTotal();
+  const hasCard = !!scannedCard?.holderName;
+  const hasItems = cartItems.length > 0;
+  const canPay = hasCard && hasItems && scannedCard!.balance >= cartTotal;
 
   const handlePay = async () => {
-    if (!scannedCard || !cartItems.length) return;
-
-    setLoading(true);
+    if (!canPay) return;
+    setPaying(true);
     setResult(null);
+    // Snapshot values before async call so they're safe to display after
+    const snapshot = cartItems.map(item => ({
+      productId: item.product.id,
+      quantity: item.quantity,
+      amount: item.product.price ?? 0,
+    }));
+    const totalSnapshot = cartTotal ?? 0;
     try {
-      const items = cartItems.map(i => ({ productId: i.product.id, quantity: i.quantity }));
-      await onPay(items);
-      setResult({
-        type: 'success',
-        message: `Payment Approved! $${totalCost.toLocaleString()} | Remaining Balance: $${(scannedCard.balance - totalCost).toLocaleString()}`
-      });
-      // Reset cart and scanned card
-      Object.keys(cart).forEach(key => onSetCartQty(parseInt(key), 0));
-      setScannedCard(null);
-    } catch (error) {
-      setResult({ type: 'error', message: 'Payment failed' });
+      await onPay(snapshot);
+      setResult({ type: 'success', message: `Payment of $${totalSnapshot.toLocaleString()} processed successfully` });
+    } catch (e: any) {
+      setResult({ type: 'error', message: e?.message || 'Payment failed' });
     } finally {
-      setLoading(false);
+      setPaying(false);
     }
   };
 
   return (
-    <ScrollView style={styles.screenContainer}>
-      <Text style={styles.pageTitle}>🛒 Payment</Text>
-      <Text style={styles.pageSubtitle}>Select products, then tap customer's card</Text>
+    <View style={{ flex: 1, backgroundColor: '#01010d' }}>
 
-      {/* Step 1: Select Products */}
-      <View style={styles.panel}>
-        <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>Step 1 — Select Products</Text>
+      {/* ── Sticky card header ── */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, backgroundColor: '#01010d' }}>
+        <View style={styles.pageTitleRow}>
+          <PaymentIcon size={22} color="#6366f1" />
+          <Text style={styles.pageTitle}>Payment</Text>
         </View>
-        <View style={styles.panelBody}>
-          <View style={styles.productGrid}>
-            {products.map(product => {
-              const inCart = cart[product.id] > 0;
-              const quantity = cart[product.id] || 0;
-              
-              return (
-                <View
-                  key={product.id}
-                  style={[styles.productCard, inCart && styles.productCardSelected]}
-                >
-                  <TouchableOpacity
-                    style={styles.productCardContent}
-                    onPress={() => !inCart && onToggleProduct(product.id)}
-                  >
-                    {inCart && <Text style={styles.productCheck}>✓</Text>}
-                    <Text style={styles.productName}>{product.name}</Text>
-                    <Text style={styles.productPrice}>${product.price.toLocaleString()}</Text>
-                    <Text style={styles.productCategory}>{product.category}</Text>
-                  </TouchableOpacity>
-                  
-                  {inCart && (
-                    <View style={styles.productQuantityControls}>
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => {
-                          if (quantity > 1) {
-                            onSetCartQty(product.id, quantity - 1);
-                          } else {
-                            onToggleProduct(product.id);
-                          }
-                        }}
-                      >
-                        <Text style={styles.quantityButtonText}>−</Text>
-                      </TouchableOpacity>
-                      
-                      <Text style={styles.quantityText}>{quantity}</Text>
-                      
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => onSetCartQty(product.id, quantity + 1)}
-                      >
-                        <Text style={styles.quantityButtonText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
 
-          {!hasSelection && (
-            <Text style={styles.selectionHint}>👆 Tap products above to add them to the cart</Text>
-          )}
-        </View>
-      </View>
-
-      {/* Cart Summary */}
-      {hasSelection && (
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.panelTitle}>Cart ({cartItems.length} items)</Text>
-          </View>
-          <View style={styles.panelBody}>
-            {cartItems.map(item => (
-              <View key={item.product.id} style={styles.cartRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cartItemName}>{item.product.name}</Text>
-                  <Text style={styles.cartItemPrice}>${item.product.price.toLocaleString()} each</Text>
-                </View>
-                <TextInput
-                  style={styles.cartQtyInput}
-                  value={item.quantity.toString()}
-                  onChangeText={(val) => onSetCartQty(item.product.id, parseInt(val) || 1)}
-                  keyboardType="numeric"
-                />
-                <Text style={styles.cartItemTotal}>${item.lineCost.toLocaleString()}</Text>
-                <TouchableOpacity
-                  style={styles.cartRemoveBtn}
-                  onPress={() => onToggleProduct(item.product.id)}
-                >
-                  <Text style={styles.cartRemoveText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            <View style={styles.cartTotal}>
-              <Text style={styles.cartTotalLabel}>Total</Text>
-              <Text style={styles.cartTotalValue}>${totalCost.toLocaleString()}</Text>
+        {/* Card widget — always visible */}
+        {!scannedCard ? (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 12,
+            backgroundColor: '#0a0a12', borderWidth: 1, borderColor: '#1f2937',
+            padding: 16, marginTop: 8,
+          }}>
+            <RfidIcon size={28} color="#6366f1" />
+            <View>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>No card detected</Text>
+              <Text style={{ color: '#9ca3af', fontSize: 12 }}>Tap your RFID card on the reader</Text>
             </View>
           </View>
-        </View>
-      )}
-
-      {/* Step 2: Tap Customer's Card */}
-      {hasSelection && (
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.panelTitle}>Step 2 — Tap Customer's Card</Text>
-          </View>
-          <View style={styles.panelBody}>
-            {!scannedCard ? (
-              <View style={styles.scanArea}>
-                <Text style={styles.scanIcon}>📡</Text>
-                <Text style={styles.scanText}>Waiting for RFID card scan...</Text>
-                <Text style={styles.scanSubtext}>Or enter UID manually below</Text>
-
-                <View style={styles.manualLookup}>
-                  <TextInput
-                    style={styles.manualInput}
-                    placeholder="Enter UID"
-                    value={manualUid}
-                    onChangeText={setManualUid}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity style={styles.btnPrimary} onPress={manualLookup}>
-                    <Text style={styles.btnPrimaryText}>Lookup</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.balanceDisplay}>
-                <Text style={styles.balanceLabel}>Card Balance</Text>
-                <Text style={[styles.balanceValue, insufficient && styles.balanceInsufficient]}>
-                  ${scannedCard.balance.toLocaleString()}
-                </Text>
-                <Text style={styles.balanceHolder}>👤 {scannedCard.card_holder}</Text>
-                {insufficient && (
-                  <Text style={styles.insufficientText}>
-                    ⚠️ Insufficient balance — need ${totalCost.toLocaleString()}
-                  </Text>
-                )}
-              </View>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* Step 3: Confirm Payment */}
-      {canPay && (
-        <View style={styles.panel}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.panelTitle}>Step 3 — Confirm Payment</Text>
-          </View>
-          <View style={styles.panelBody}>
-            {result && (
-              <View style={[styles.alert, result.type === 'success' ? styles.alertSuccess : styles.alertError]}>
-                <Text style={styles.alertText}>{result.message}</Text>
-              </View>
-            )}
-
-            <View style={styles.paymentSummary}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Items</Text>
-                <Text style={styles.summaryValue}>
-                  {cartItems.map(i => `${i.product.name}×${i.quantity}`).join(', ')}
-                </Text>
-              </View>
-
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total</Text>
-                <Text style={styles.summaryValueTotal}>${totalCost.toLocaleString()}</Text>
-              </View>
-
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Card Balance</Text>
-                <Text style={styles.summaryValueSuccess}>${scannedCard!.balance.toLocaleString()}</Text>
-              </View>
-
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Remaining After</Text>
-                <Text style={styles.summaryValueWarning}>
-                  ${(scannedCard!.balance - totalCost).toLocaleString()}
-                </Text>
-              </View>
+        ) : !scannedCard.holderName ? (
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 12,
+            backgroundColor: '#0a0a12', borderWidth: 1, borderColor: '#f59e0b',
+            padding: 16, marginTop: 8,
+          }}>
+            <WarningIcon size={24} color="#f59e0b" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#f59e0b', fontSize: 13, fontWeight: '600' }}>Unregistered card</Text>
+              <Text style={{ color: '#9ca3af', fontSize: 11, fontFamily: 'monospace' }}>{scannedCard.uid}</Text>
             </View>
-
-            <TouchableOpacity
-              style={[styles.btnPrimary, loading && styles.btnDisabled]}
-              onPress={handlePay}
-              disabled={loading}
-            >
-              <Text style={styles.btnPrimaryText}>💳 Confirm & Pay</Text>
+            <TouchableOpacity onPress={() => setScannedCard(null)}>
+              <XIcon size={18} color="#9ca3af" />
             </TouchableOpacity>
           </View>
+        ) : (
+          <View style={{
+            backgroundColor: '#161b22', borderWidth: 1,
+            borderColor: '#22c55e', padding: 16, marginTop: 8,
+          }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 30, height: 22, backgroundColor: '#f59e0b', borderRadius: 3, opacity: 0.85 }} />
+                <View>
+                  <Text style={{ color: '#555570', fontSize: 9, letterSpacing: 1 }}>HOLDER</Text>
+                  <View style={styles.iconRow}>
+                    <UserIcon size={12} color="#9ca3af" />
+                    <Text style={{ color: '#e5e7eb', fontSize: 13, marginLeft: 4, fontWeight: '600' }}>
+                      {scannedCard.holderName}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: '#555570', fontSize: 9, letterSpacing: 1 }}>BALANCE</Text>
+                <Text style={[
+                  { fontSize: 20, fontWeight: 'bold' },
+                  (scannedCard.balance ?? 0) < cartTotal ? { color: '#ef4444' } : { color: '#22c55e' }
+                ]}>
+                  ${(scannedCard.balance ?? 0).toLocaleString()}
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: '#555570', fontSize: 10, fontFamily: 'monospace', letterSpacing: 1 }}>
+                {scannedCard.uid}
+              </Text>
+              <View style={styles.iconRow}>
+                <CheckIcon size={12} color="#22c55e" />
+                <Text style={{ color: '#22c55e', fontSize: 10, marginLeft: 3, letterSpacing: 1 }}>ACTIVE</Text>
+              </View>
+            </View>
+            {hasItems && (scannedCard.balance ?? 0) < cartTotal && (
+              <View style={[styles.iconRow, { marginTop: 8 }]}>
+                <XIcon size={12} color="#ef4444" />
+                <Text style={{ color: '#ef4444', fontSize: 11, marginLeft: 4 }}>Insufficient balance for this order</Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* ── Scrollable content ── */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingTop: 8 }}>
+
+        {/* Product Selection */}
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <View style={styles.iconRow}>
+              <CartIcon size={16} color="#9ca3af" />
+              <Text style={[styles.panelTitle, { marginLeft: 8 }]}>Select Products</Text>
+            </View>
+          </View>
+          <View style={styles.panelBody}>
+            {products.length === 0 ? (
+              <Text style={styles.emptyText}>No products available</Text>
+            ) : (
+              <View style={styles.productGrid}>
+                {products.map(product => {
+                  const qty = cart[product.id] || 0;
+                  const inCart = qty > 0;
+                  return (
+                    <View key={product.id} style={[styles.productCard, inCart && styles.productCardSelected]}>
+                      <View style={styles.productCardContent}>
+                        {inCart && (
+                          <View style={styles.productCheckIcon}>
+                            <CheckIcon size={16} color="#6366f1" />
+                          </View>
+                        )}
+                        <Text style={styles.productName}>{product.name}</Text>
+                        <Text style={styles.productPrice}>${(product.price ?? 0).toLocaleString()}</Text>
+                        <Text style={styles.productCategory}>{product.category}</Text>
+                      </View>
+                      {inCart ? (
+                        <View style={styles.productQuantityControls}>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => qty > 1 ? onSetCartQty(product.id, qty - 1) : onToggleProduct(product.id)}
+                          >
+                            <Text style={styles.quantityButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.quantityText}>{qty}</Text>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => onSetCartQty(product.id, qty + 1)}
+                          >
+                            <Text style={styles.quantityButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity style={styles.btnPrimary} onPress={() => onToggleProduct(product.id)}>
+                          <Text style={styles.btnPrimaryText}>+ Add</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
         </View>
-      )}
-    </ScrollView>
+
+        {/* Cart Summary */}
+        {hasItems && (
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelTitle}>Cart Summary</Text>
+            </View>
+            <View style={styles.panelBody}>
+              {result && (
+                <View style={[styles.alert, result.type === 'success' ? styles.alertSuccess : styles.alertError]}>
+                  <View style={styles.iconRow}>
+                    {result.type === 'success'
+                      ? <CheckIcon size={16} color="#22c55e" />
+                      : <XIcon size={16} color="#ef4444" />
+                    }
+                    <Text style={[styles.alertText, { marginLeft: 6 }]}>{result.message}</Text>
+                  </View>
+                </View>
+              )}
+
+              {cartItems.map(item => (
+                <View key={item.product.id} style={styles.cartRow}>
+                  <Text style={styles.cartItemName}>{item.product.name}</Text>
+                  <Text style={styles.cartItemPrice}>x{item.quantity}</Text>
+                  <Text style={styles.cartItemTotal}>${(item.lineCost ?? 0).toLocaleString()}</Text>
+                  <TouchableOpacity style={styles.cartRemoveBtn} onPress={() => onToggleProduct(item.product.id)}>
+                    <XIcon size={14} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <View style={styles.cartTotal}>
+                <Text style={styles.cartTotalLabel}>Total</Text>
+                <Text style={styles.cartTotalValue}>${(cartTotal ?? 0).toLocaleString()}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.btnSuccess, (!canPay || paying) && styles.btnDisabled]}
+                onPress={handlePay}
+                disabled={!canPay || paying}
+              >
+                <View style={styles.iconRow}>
+                  <ArrowUpIcon size={16} color="#fff" />
+                  <Text style={[styles.btnSuccessText, { marginLeft: 6 }]}>
+                    {paying ? 'Processing...' : 'Confirm Payment'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {!hasCard && (
+                <View style={[styles.iconRow, { marginTop: 8 }]}>
+                  <WarningIcon size={14} color="#f59e0b" />
+                  <Text style={{ color: '#f59e0b', fontSize: 13, marginLeft: 6 }}>Scan a card to pay</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+      </ScrollView>
+    </View>
   );
 }

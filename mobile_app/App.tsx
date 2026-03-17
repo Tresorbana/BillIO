@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts, Orbitron_700Bold } from '@expo-google-fonts/orbitron';
 
@@ -22,6 +23,7 @@ import PaymentsScreen from './screens/PaymentsScreen';
 import ProductsScreen from './screens/ProductsScreen';
 import TransactionsScreen from './screens/TransactionsScreen';
 import CardsScreen from './screens/CardsScreen';
+import MyWalletScreen from './screens/MyWalletScreen';
 
 // Import components
 import CornerAccents from './components/CornerAccents';
@@ -35,21 +37,23 @@ import {
   LogoutIcon,
   UserIcon,
   MenuIcon,
-  CloseIcon
+  CloseIcon,
+  WalletIcon,
+  BrandText
 } from './components/Icons';
 
 // Import styles
 import { styles } from './styles';
-
-const API_BASE = 'http://10.12.72.106:6700';
+import { API_BASE } from './config';
+import { getSocket } from './socket';
 
 interface User {
   username: string;
-  role: 'agent' | 'cashier' | 'admin';
+  role: string;
 }
 
 interface Product {
-  id: number;
+  id: string;
   name: string;
   price: number;
   category: string;
@@ -63,13 +67,14 @@ interface CartItem {
 
 interface Card {
   uid: string;
-  card_holder: string;
+  holderName: string;
   balance: number;
-  registered_at: string;
+  createdAt: string;
 }
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -85,9 +90,11 @@ export default function App() {
   const checkAuth = async () => {
     try {
       const storedUser = await AsyncStorage.getItem('user');
-      if (storedUser) {
+      const storedToken = await AsyncStorage.getItem('token');
+      if (storedUser && storedToken) {
         const userData = JSON.parse(storedUser);
         setUser(userData);
+        setToken(storedToken);
         setIsAuthenticated(true);
       }
     } catch (error) {
@@ -97,11 +104,14 @@ export default function App() {
     }
   };
 
-  async function handleLogin(userData: User) {
+  async function handleLogin(loginData: { token: string; username: string; role: string }) {
+    const userData = { username: loginData.username, role: loginData.role };
     setUser(userData);
+    setToken(loginData.token);
     setIsAuthenticated(true);
     setShowAuth(false);
     await AsyncStorage.setItem('user', JSON.stringify(userData));
+    await AsyncStorage.setItem('token', loginData.token);
   }
 
   async function handleLogout() {
@@ -130,7 +140,7 @@ export default function App() {
           ) : !isAuthenticated && showAuth ? (
             <AuthScreen onLogin={handleLogin} onBack={() => setShowAuth(false)} />
           ) : (
-            <MainApp user={user!} onLogout={handleLogout} />
+            <MainApp user={user!} token={token} onLogout={handleLogout} />
           )}
         </NavigationContainer>
       </GestureHandlerRootView>
@@ -138,12 +148,22 @@ export default function App() {
   );
 }
 
-function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack: () => void }) {
+// Maps DB role values to display labels
+function getRoleLabel(role: string): string {
+  switch (role) {
+    case 'admin': return 'ADMIN';
+    case 'agent': return 'AGENT';
+    case 'user': return 'SALESPERSON';
+    default: return role?.toUpperCase() || 'UNKNOWN';
+  }
+}
+
+function AuthScreen({ onLogin, onBack }: { onLogin: (loginData: { token: string; username: string; role: string }) => void; onBack: () => void }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [signupRole, setSignupRole] =
-    useState<'agent' | 'cashier' | 'admin'>('agent');
+    useState<'user' | 'admin' | 'agent'>('user');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -165,6 +185,7 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
         return;
       }
 
+      console.log('✅ Backend connected successfully - Login response:', data);
       onLogin(data);
     } catch {
       alert('Connection failed');
@@ -196,7 +217,9 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
         return;
       }
 
-      onLogin(data);
+      // Signup returns { message } not a token — switch to login
+      alert('Account created! Please log in.');
+      setIsLogin(true);
     } catch {
       alert('Connection failed');
     } finally {
@@ -218,7 +241,7 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
         </TouchableOpacity>
 
         <Text style={styles.authTitle}>
-          <Text style={styles.brand}>Ballio</Text>
+          <BrandText size={28} />
         </Text>
         <Text style={styles.authSubtitle}>Secure Transaction System</Text>
 
@@ -268,10 +291,12 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
             <Picker
               selectedValue={signupRole}
               onValueChange={(v) => setSignupRole(v)}
+              style={{ color: '#000', backgroundColor: '#fff' }}
+              dropdownIconColor="#000"
             >
-              <Picker.Item label="Agent" value="agent" />
-              <Picker.Item label="Cashier" value="cashier" />
-              <Picker.Item label="Admin" value="admin" />
+              <Picker.Item label="Admin" value="admin" color="#000" />
+              <Picker.Item label="Salesperson" value="user" color="#000" />
+              <Picker.Item label="Agent" value="agent" color="#000" />
             </Picker>
           </View>
         )}
@@ -295,26 +320,96 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (user: User) => void; onBack
   );
 }
 
-function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
+function MainApp({ user, token, onLogout }: { user: User; token: string | null; onLogout: () => void }) {
   const insets = useSafeAreaInsets();
 
   const [currentView, setCurrentView] = useState<string>(
     user.role === 'agent'
       ? 'topup'
-      : user.role === 'cashier'
+      : user.role === 'user'
       ? 'payment'
       : 'dashboard'
   );
 
   const [scannedCard, setScannedCard] = useState<Card | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<{ [key: number]: number }>({});
-  const [isOnline, setIsOnline] = useState(true);
+  const [cart, setCart] = useState<{ [key: string]: number }>({});
+  const [isOnline, setIsOnline] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Slide animation
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  const navigateTo = (key: string, direction: 'left' | 'right') => {
+    const outVal = direction === 'left' ? -400 : 400;
+    const inVal  = direction === 'left' ?  400 : -400;
+    Animated.timing(slideAnim, {
+      toValue: outVal,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      setCurrentView(key);
+      setScannedCard(null);
+      setCart({});
+      slideAnim.setValue(inVal);
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 80,
+        friction: 12,
+      }).start();
+    });
+  };
 
   useEffect(() => {
     loadProducts();
-    setIsOnline(true);
+
+    const socket = getSocket();
+    socket.connect();
+
+    socket.on('connect', () => setIsOnline(true));
+    socket.on('disconnect', () => setIsOnline(false));
+
+    // Card tapped on RFID reader — auto-populate scannedCard
+    socket.on('card-status', (data: { uid: string; holderName: string | null; balance: number; status: string; present: boolean; ts: number }) => {
+      if (data.present) {
+        setScannedCard({
+          uid: data.uid,
+          holderName: data.holderName ?? '',
+          balance: data.balance,
+          createdAt: '',
+        });
+      } else {
+        setScannedCard(null);
+      }
+    });
+
+    // Balance updated (after topup/payment) — sync local card state
+    socket.on('card-balance', (data: { uid: string; balance: number }) => {
+      setScannedCard(prev =>
+        prev?.uid === data.uid ? { ...prev, balance: data.balance } : prev
+      );
+    });
+
+    // Card removed from reader
+    socket.on('card-removed', () => setScannedCard(null));
+
+    // Payment confirmed by backend
+    socket.on('payment-success', (data: { uid: string; balanceAfter: number }) => {
+      setScannedCard(prev =>
+        prev?.uid === data.uid ? { ...prev, balance: data.balanceAfter } : prev
+      );
+    });
+
+    return () => {
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('card-status');
+      socket.off('card-balance');
+      socket.off('card-removed');
+      socket.off('payment-success');
+      socket.disconnect();
+    };
   }, []);
 
   const loadProducts = async () => {
@@ -326,50 +421,52 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     }
   };
 
-  const handleTopup = async (uid: string, amount: number) => {
+  const handleTopup = async (uid: string, amount: number, holderName?: string) => {
     const response = await fetch(`${API_BASE}/topup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid, amount })
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ uid, amount, holderName })
     });
 
     if (!response.ok) throw new Error('Top-up failed');
   };
 
-  const handlePay = async (items: { productId: number; quantity: number }[]) => {
-    const response = await fetch(`${API_BASE}/pay`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: scannedCard?.uid, items })
-    });
+  const handlePay = async (items: { productId: string; quantity: number; amount: number }[]) => {
+    // Send one request per cart line — use amount directly since backend PRODUCTS lookup is unreliable
+    for (const item of items) {
+      const totalLineAmount = item.amount * item.quantity;
+      const response = await fetch(`${API_BASE}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          uid: scannedCard?.uid,
+          amount: totalLineAmount,
+          description: `Purchase x${item.quantity}`,
+        })
+      });
 
-    const data = await response.json();
-
-    if (!response.ok || data.status !== 'approved') {
-      throw new Error(data.error || 'Payment failed');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Payment failed');
     }
   };
 
-  const toggleProduct = (productId: number) => {
+  const toggleProduct = (productId: string) => {
     setCart(prev => {
       const newCart = { ...prev };
-
       if (newCart[productId]) delete newCart[productId];
       else newCart[productId] = 1;
-
       return newCart;
     });
   };
 
-  const setCartQty = (productId: number, qty: number) => {
+  const setCartQty = (productId: string, qty: number) => {
     setCart(prev => ({ ...prev, [productId]: Math.max(1, qty) }));
   };
 
   const getCartItems = (): CartItem[] => {
     return Object.entries(cart)
       .map(([id, qty]) => {
-        const product = products.find(p => p.id === Number(id));
-
+        const product = products.find(p => String(p.id) === id);
         return product
           ? { product, quantity: qty, lineCost: product.price * qty }
           : null;
@@ -383,7 +480,7 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const renderCurrentView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <DashboardScreen />;
+        return <DashboardScreen token={token} />;
 
       case 'topup':
         return (
@@ -415,17 +512,28 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
             products={products}
             onLoadProducts={loadProducts}
             setProducts={setProducts}
+            token={token}
+            readonly={user.role === 'user'}
+            cart={cart}
+            onToggleProduct={toggleProduct}
+            onSetCartQty={setCartQty}
+            getCartItems={getCartItems}
+            getCartTotal={getCartTotal}
+            onGoToPayment={() => setCurrentView('payment')}
           />
         );
 
       case 'transactions':
-        return <TransactionsScreen />;
+        return <TransactionsScreen username={user.username} role={user.role} token={token} />;
 
       case 'cards':
-        return <CardsScreen />;
+        return <CardsScreen scannedCard={scannedCard} token={token} role={user.role} />;
+
+      case 'wallet':
+        return <MyWalletScreen username={user.username} token={token} />;
 
       default:
-        return <DashboardScreen />;
+        return <DashboardScreen token={token}/>;
     }
   };
 
@@ -437,8 +545,6 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
     if (user.role === 'admin') {
       items.push(
         { key: 'dashboard', label: 'Dashboard', IconComponent: DashboardIcon },
-        { key: 'topup', label: 'Top-Up', IconComponent: TopUpIcon },
-        { key: 'payment', label: 'Payment', IconComponent: PaymentIcon },
         { key: 'products', label: 'Products', IconComponent: ProductsIcon },
         { key: 'transactions', label: 'Transactions', IconComponent: TransactionsIcon },
         { key: 'cards', label: 'Cards', IconComponent: CardsIcon }
@@ -451,10 +557,13 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         { key: 'cards', label: 'Cards', IconComponent: CardsIcon }
       );
     }
-    // Cashier gets only payment
-    else if (user.role === 'cashier') {
+    // Salesperson (user) gets payment, products, wallet, and transactions
+    else if (user.role === 'user') {
       items.push(
-        { key: 'payment', label: 'Payment', IconComponent: PaymentIcon }
+        { key: 'payment', label: 'Payment', IconComponent: PaymentIcon },
+        { key: 'products', label: 'Products', IconComponent: ProductsIcon },
+        { key: 'wallet', label: 'My Wallet', IconComponent: WalletIcon },
+        { key: 'transactions', label: 'Transactions', IconComponent: TransactionsIcon }
       );
     }
     
@@ -464,15 +573,31 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const navItems = getNavItems();
 
   const onSwipeGesture = (event: any) => {
-    const { translationX, x } = event.nativeEvent;
-    
-    // Only respond to swipes from the left edge (first 50px) to open menu
-    if (x < 50 && translationX > 100 && !menuOpen) {
-      setMenuOpen(true);
-    }
-    // Swipe left to close menu (only when menu is open)
-    else if (translationX < -100 && menuOpen) {
-      setMenuOpen(false);
+    const { state, translationX, translationY, x } = event.nativeEvent;
+
+    // Only act on END state — fires exactly once per swipe
+    if (state !== State.END) return;
+
+    // Ignore mostly-vertical gestures
+    if (Math.abs(translationY) > Math.abs(translationX) * 0.7) return;
+
+    if (!menuOpen) {
+      // Open menu: swipe right from left edge
+      if (x < 60 && translationX > 60) {
+        setMenuOpen(true);
+        return;
+      }
+      // Navigate: require at least 80px horizontal travel
+      if (Math.abs(translationX) < 80) return;
+      const keys = navItems.map(i => i.key);
+      const idx = keys.indexOf(currentView);
+      if (translationX < 0 && idx < keys.length - 1) {
+        navigateTo(keys[idx + 1], 'left');
+      } else if (translationX > 0 && idx > 0) {
+        navigateTo(keys[idx - 1], 'right');
+      }
+    } else {
+      if (translationX < -60) setMenuOpen(false);
     }
   };
 
@@ -485,9 +610,9 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
 
         {/* Edge Swipe Area for Menu */}
         <PanGestureHandler 
-          onGestureEvent={onSwipeGesture}
-          activeOffsetX={[-10, 10]}
-          failOffsetY={[-20, 20]}
+          onHandlerStateChange={onSwipeGesture}
+          activeOffsetX={[-15, 15]}
+          failOffsetY={[-30, 30]}
         >
           <View style={styles.edgeSwipeArea} />
         </PanGestureHandler>
@@ -506,8 +631,8 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         </TouchableOpacity>
         
         <Text style={styles.mobileHeaderTitle}>
-          <Text style={styles.brand}>Ballio</Text>
-          <Text style={styles.titleRest}> — RFID Wallet System</Text>
+          <BrandText size={20} />
+          <Text style={styles.titleRest}>  RFID Wallet</Text>
         </Text>
         
         <View style={styles.mobileHeaderRight}>
@@ -526,8 +651,8 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
             </View>
             <View style={styles.userDetails}>
               <Text style={styles.userName}>{user.username}</Text>
-              <Text style={[styles.userRole, styles[`userRole${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` as keyof typeof styles]]}>
-                {user.role.toUpperCase()}
+              <Text style={[styles.userRole, user.role ? styles[`userRole${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` as keyof typeof styles] : styles.userRole]}>
+                {getRoleLabel(user.role)}
               </Text>
             </View>
           </View>
@@ -601,9 +726,15 @@ function MainApp({ user, onLogout }: { user: User; onLogout: () => void }) {
         />
       )}
 
-        <View style={styles.mainContent}>
-          {renderCurrentView()}
-        </View>
+        <PanGestureHandler
+          onHandlerStateChange={onSwipeGesture}
+          activeOffsetX={[-15, 15]}
+          failOffsetY={[-30, 30]}
+        >
+          <Animated.View style={[styles.mainContent, { transform: [{ translateX: slideAnim }] }]}>
+            {renderCurrentView()}
+          </Animated.View>
+        </PanGestureHandler>
 
       </View>
     </SafeAreaView>

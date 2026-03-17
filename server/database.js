@@ -172,7 +172,6 @@ export function deleteProduct(id) {
 
 /**
  * Top-up: Increases card balance atomically.
- * Returns { success, card, transaction } or { success: false, error }
  */
 export function safeTopup(uid, amount) {
   const topupTx = db.transaction(() => {
@@ -183,28 +182,13 @@ export function safeTopup(uid, amount) {
     const balanceAfter = balanceBefore + amount;
 
     stmts.updateBalance.run(balanceAfter, uid);
+    stmts.createTransaction.run(uid, "TOPUP", amount, balanceBefore, balanceAfter, null, null, null);
 
-    stmts.createTransaction.run(
-      uid,
-      "TOPUP",
-      amount,
-      balanceBefore,
-      balanceAfter,
-      null,
-      null,
-      null,
-    );
-
-    return {
-      card: { ...card, balance: balanceAfter },
-      balanceBefore,
-      balanceAfter,
-    };
+    return { card: { ...card, balance: balanceAfter }, balanceBefore, balanceAfter };
   });
 
   try {
-    const result = topupTx();
-    return { success: true, ...result };
+    return { success: true, ...topupTx() };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -212,7 +196,6 @@ export function safeTopup(uid, amount) {
 
 /**
  * Payment: Deducts card balance atomically.
- * Returns { success, card, transaction } or { success: false, error }
  */
 export function safePayment(uid, productId, quantity) {
   const payTx = db.transaction(() => {
@@ -223,41 +206,20 @@ export function safePayment(uid, productId, quantity) {
     if (!product || !product.active) throw new Error("Product not found");
 
     const totalCost = product.price * quantity;
-    if (card.balance < totalCost) {
-      throw new Error(
-        `Insufficient balance. Need ${totalCost}, have ${card.balance}`,
-      );
-    }
+    if (card.balance < totalCost)
+      throw new Error(`Insufficient balance. Need ${totalCost}, have ${card.balance}`);
 
     const balanceBefore = card.balance;
     const balanceAfter = balanceBefore - totalCost;
 
     stmts.updateBalance.run(balanceAfter, uid);
+    stmts.createTransaction.run(uid, "PAYMENT", totalCost, balanceBefore, balanceAfter, productId, product.name, quantity);
 
-    stmts.createTransaction.run(
-      uid,
-      "PAYMENT",
-      totalCost,
-      balanceBefore,
-      balanceAfter,
-      productId,
-      product.name,
-      quantity,
-    );
-
-    return {
-      card: { ...card, balance: balanceAfter },
-      product,
-      quantity,
-      totalCost,
-      balanceBefore,
-      balanceAfter,
-    };
+    return { card: { ...card, balance: balanceAfter }, product, quantity, totalCost, balanceBefore, balanceAfter };
   });
 
   try {
-    const result = payTx();
-    return { success: true, ...result };
+    return { success: true, ...payTx() };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -277,45 +239,26 @@ export function safeCartPayment(uid, items) {
 
     for (const item of items) {
       const product = stmts.getProduct.get(item.productId);
-      if (!product || !product.active)
-        throw new Error(`Product #${item.productId} not found`);
+      if (!product || !product.active) throw new Error(`Product #${item.productId} not found`);
       const lineCost = product.price * item.quantity;
       totalCost += lineCost;
       resolvedItems.push({ product, quantity: item.quantity, lineCost });
     }
 
-    if (card.balance < totalCost) {
-      throw new Error(
-        `Insufficient balance. Need $${totalCost}, have $${card.balance}`,
-      );
-    }
+    if (card.balance < totalCost)
+      throw new Error(`Insufficient balance. Need ${totalCost}, have ${card.balance}`);
 
     const balanceBefore = card.balance;
     let runningBalance = balanceBefore;
 
     for (const ri of resolvedItems) {
       runningBalance -= ri.lineCost;
-      stmts.createTransaction.run(
-        uid,
-        "PAYMENT",
-        ri.lineCost,
-        balanceBefore,
-        runningBalance,
-        ri.product.id,
-        ri.product.name,
-        ri.quantity,
-      );
+      stmts.createTransaction.run(uid, "PAYMENT", ri.lineCost, balanceBefore, runningBalance, ri.product.id, ri.product.name, ri.quantity);
     }
 
     stmts.updateBalance.run(runningBalance, uid);
 
-    return {
-      card: { ...card, balance: runningBalance },
-      items: resolvedItems,
-      totalCost,
-      balanceBefore,
-      balanceAfter: runningBalance,
-    };
+    return { card: { ...card, balance: runningBalance }, items: resolvedItems, totalCost, balanceBefore, balanceAfter: runningBalance };
   });
 
   try {

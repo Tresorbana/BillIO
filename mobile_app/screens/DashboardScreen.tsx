@@ -1,40 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { styles } from '../styles';
+import { API_BASE } from '../config';
+import { DashboardIcon } from '../components/Icons';
 
-const API_BASE = 'http://10.12.72.106:6700';
-
-export default function DashboardScreen() {
+export default function DashboardScreen({ token }: { token: string | null }) {
   const [stats, setStats] = useState({
     topupsToday: { total: 0, count: 0 },
     paymentsToday: { total: 0, count: 0 },
     activeCards: 0,
     totalBalance: 0,
+    totalCards: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
+  useEffect(() => { loadDashboardData(); }, []);
 
   const loadDashboardData = async () => {
     try {
       const [statsRes, txRes] = await Promise.all([
-        fetch(`${API_BASE}/api/dashboard`),
-        fetch(`${API_BASE}/api/transactions`),
+        fetch(`${API_BASE}/api/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/transactions`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const statsData = await statsRes.json();
       const txData = await txRes.json();
-      setStats(statsData);
-      setRecentTransactions(txData.slice(0, 15));
-    } catch (error) {
       setStats({
-        topupsToday: { total: 1250, count: 8 },
-        paymentsToday: { total: 890, count: 12 },
-        activeCards: 45,
-        totalBalance: 15750,
+        topupsToday: statsData.topupsToday ?? { total: 0, count: 0 },
+        paymentsToday: statsData.paymentsToday ?? { total: 0, count: 0 },
+        activeCards: statsData.activeCards ?? 0,
+        totalBalance: statsData.totalBalance ?? 0,
+        totalCards: statsData.totalCards ?? statsData.activeCards ?? 0,
       });
+      setRecentTransactions(Array.isArray(txData) ? txData.slice(0, 15) : []);
+    } catch {
+      setStats({ topupsToday: { total: 0, count: 0 }, paymentsToday: { total: 0, count: 0 }, activeCards: 0, totalBalance: 0, totalCards: 0 });
     } finally {
       setLoading(false);
     }
@@ -50,30 +50,35 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView style={styles.screenContainer}>
-      <Text style={styles.pageTitle}>📊 Dashboard</Text>
+      <View style={styles.pageTitleRow}>
+        <DashboardIcon size={26} color="#6366f1" />
+        <Text style={styles.pageTitle}>Dashboard</Text>
+      </View>
       <Text style={styles.pageSubtitle}>System overview and analytics</Text>
 
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>${stats.topupsToday.total.toLocaleString()}</Text>
+          <Text style={styles.statValue}>${(stats.topupsToday.total ?? 0).toLocaleString()}</Text>
           <Text style={styles.statLabel}>Top-Ups Today</Text>
           <Text style={styles.statSub}>{stats.topupsToday.count} transactions</Text>
         </View>
-
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>${stats.paymentsToday.total.toLocaleString()}</Text>
+          <Text style={styles.statValue}>${(stats.paymentsToday.total ?? 0).toLocaleString()}</Text>
           <Text style={styles.statLabel}>Payments Today</Text>
           <Text style={styles.statSub}>{stats.paymentsToday.count} transactions</Text>
         </View>
-
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{stats.activeCards}</Text>
           <Text style={styles.statLabel}>Active Cards</Text>
-          <Text style={styles.statSub}>Registered cards</Text>
+          <Text style={styles.statSub}>Balance &gt; 0</Text>
         </View>
-
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>${stats.totalBalance.toLocaleString()}</Text>
+          <Text style={styles.statValue}>{stats.totalCards}</Text>
+          <Text style={styles.statLabel}>Total Cards</Text>
+          <Text style={styles.statSub}>Registered</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>${(stats.totalBalance ?? 0).toLocaleString()}</Text>
           <Text style={styles.statLabel}>Total Balance</Text>
           <Text style={styles.statSub}>Across all cards</Text>
         </View>
@@ -93,14 +98,14 @@ export default function DashboardScreen() {
                 <Text style={styles.tableHeaderCell}>Amount</Text>
               </View>
               {recentTransactions.map(tx => (
-                <View key={tx.id} style={styles.tableRow}>
-                  <Text style={styles.tableCell}>{new Date(tx.created_at).toLocaleString()}</Text>
+                <View key={tx._id} style={styles.tableRow}>
+                  <Text style={styles.tableCell}>{new Date(tx.timestamp).toLocaleString()}</Text>
                   <View style={[styles.badge, tx.type === 'topup' ? styles.badgeTopup : styles.badgePayment]}>
                     <Text style={styles.badgeText}>{tx.type.toUpperCase()}</Text>
                   </View>
                   <Text style={styles.tableCellMono}>{tx.uid}</Text>
                   <Text style={[styles.tableCell, tx.type === 'topup' ? styles.textSuccess : styles.textDanger]}>
-                    {tx.type === 'topup' ? '+' : '-'}${tx.amount.toLocaleString()}
+                    {tx.type === 'topup' ? '+' : '-'}${(tx.amount ?? 0).toLocaleString()}
                   </Text>
                 </View>
               ))}

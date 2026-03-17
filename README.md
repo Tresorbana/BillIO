@@ -1,166 +1,342 @@
-# 💳 RFID Integrated MQTT Payment System (Term 1)
+# BillIO — RFID Wallet System
 
-> A state-of-the-art, real-time IoT payment solution featuring a premium dashboard, persistent per-UID balance tracking, and multi-protocol communication.
+> A full-stack IoT payment platform built for Y2 Mobile Dashboard Assignment.  
+> RFID cards are used as digital wallets — tap to top-up, tap to pay.
 
 ---
 
-## 🏗 System Architecture
+## What It Does
 
-The following diagram illustrates the data flow: **Hardware** ↔ **MQTT Broker** ↔ **Node.js Backend** ↔ **WebSocket** ↔ **Web Dashboard**.
+BillIO connects a physical RFID reader (ESP8266 + MFRC522) to a mobile dashboard through MQTT and a REST/WebSocket backend. Three roles interact with the system:
 
-```mermaid
-graph TD
-    subgraph "Hardware (ESP8266)"
-        RFID[RC522 Reader] -->|UID Scan| ESP[ESP8266 NodeMCU]
-        ESP -->|MQTT Pub| Broker[Shared MQTT Broker]
-    end
+- **Admin** — full control: dashboard stats, top-ups, payments, product management, transaction history, card registry
+- **Agent** — top-up cards and register new cards
+- **Salesperson** — browse products, build a cart, and process payments via RFID card
 
-    subgraph "Infrastructure"
-        Broker -->|MQTT Sub/Broadcast| Srv[Node.js Server]
-        Srv -->|WebSocket| Web[Browser Dashboard]
-    end
+When a card is tapped on the reader, the backend receives the UID over MQTT, looks it up in MongoDB, and pushes the card data to the mobile app in real time via Socket.IO. The operator then confirms the transaction, the balance is updated in the database, and the new balance is written back to the card over MQTT.
 
-    subgraph "User Actions"
-        Dash[Web Dashboard] -->|HTTP POST /topup| Srv
-        Srv -->|MQTT Pub /topup| Broker
-        Broker -->|MQTT Sub| ESP
-        ESP -->|Update Balance| ESP
-    end
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    RFID Hardware                        │
+│         ESP8266 + MFRC522 Card Reader                   │
+└──────────────────────┬──────────────────────────────────┘
+                       │ MQTT (TCP 1883)
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│                  MQTT Broker                            │
+│              broker.hivemq.com                          │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│               Backend Server (Node.js)                  │
+│  Express REST API + Socket.IO + MQTT Client             │
+│  Deployed at: http://157.173.101.159:8228               │
+└──────────┬────────────────────────────┬─────────────────┘
+           │ MongoDB Atlas               │ Socket.IO / REST
+           ▼                            ▼
+┌──────────────────┐        ┌───────────────────────────┐
+│   MongoDB Atlas  │        │   React Native Mobile App  │
+│  (Cloud DB)      │        │   (Expo — Android/iOS)     │
+└──────────────────┘        └───────────────────────────┘
 ```
 
 ---
 
-## 🛠 Hardware Specifications
+## Tech Stack
 
-### Wiring Diagram (NodeMCU to RC522)
-
-| RC522 Pin    | ESP8266 Pin | Description             |
-| :----------- | :---------- | :---------------------- |
-| **SDA (SS)** | **D8**      | SPI Slave Select        |
-| **SCK**      | **D5**      | SPI Clock               |
-| **MOSI**     | **D7**      | SPI Master Out Slave In |
-| **MISO**     | **D6**      | SPI Master In Slave Out |
-| **GND**      | **GND**     | Common Ground           |
-| **RST**      | **D3**      | Reset Pin               |
-| **3.3V**     | **3.3V**    | Power Supply            |
-
-### Firmware Logic
-
-The firmware uses a `std::map<String, int>` to maintain independent balances for every card scanned. This ensures that memory is used efficiently and card balances are isolated.
+| Layer | Technology |
+|-------|-----------|
+| Mobile App | React Native (Expo), TypeScript |
+| Backend | Node.js, Express.js |
+| Real-time | Socket.IO (WebSocket) |
+| IoT Messaging | MQTT (mqtt.js client + HiveMQ broker) |
+| Database | MongoDB Atlas (Mongoose ODM) |
+| Auth | JWT (jsonwebtoken) + bcrypt |
+| Hardware | ESP8266 + MFRC522 RFID reader (Arduino) |
 
 ---
 
-## 📡 Communication Protocol (MQTT)
+## Project Structure
 
-**Team ID:** `1nt3rn4l_53rv3r_3rr0r` | **Host:** `157.173.101.159:1883`
-
-| Action             | Topic                                     | Payload                              | Description                         |
-| :----------------- | :---------------------------------------- | :----------------------------------- | :---------------------------------- |
-| **Status Event**   | `rfid/1nt3rn4l_53rv3r_3rr0r/card/status`  | `{"uid": "...", "balance": 0}`       | Published when a card is scanned.   |
-| **Top-up Command** | `rfid/1nt3rn4l_53rv3r_3rr0r/card/topup`   | `{"uid": "...", "amount": 100}`      | Sent by backend to trigger top-up.  |
-| **Balance Sync**   | `rfid/1nt3rn4l_53rv3r_3rr0r/card/balance` | `{"uid": "...", "new_balance": 100}` | Published by hardware after update. |
-
----
-
-## 💻 Software Components
-
-### 1. Web Dashboard (Frontend)
-
-A high-fidelity **Tailwind CSS** dashboard with:
-
-- **Glassmorphism Design:** Dark theme with transparent backdrop blurs.
-- **Dynamic Connection:** Automatically detects hosting environment (Local vs VPS).
-- **Log Terminal:** Real-time stream of all system events.
-
-### 2. Node.js Backend
-
-- **Express Server:** Handles manual top-up requests via REST API.
-- **MQTT Translator:** Bridges hardware events to the web.
-- **WebSocket Server:** Pushes live events to all connected clients instantly.
-
----
-
-## 🔌 API Documentation
-
-### **POST** `/topup`
-
-Used by the dashboard or external tools to add funds to a card.
-
-**Request Body:**
-
-```json
-{
-  "uid": "1a2b3c4d",
-  "amount": 1000
-}
+```
+/
+├── mobile_app/              # React Native (Expo) mobile dashboard
+│   ├── screens/             # One file per screen
+│   │   ├── HomeScreen.tsx
+│   │   ├── DashboardScreen.tsx
+│   │   ├── TopupScreen.tsx
+│   │   ├── PaymentsScreen.tsx
+│   │   ├── ProductsScreen.tsx
+│   │   ├── TransactionsScreen.tsx
+│   │   └── CardsScreen.tsx
+│   ├── components/          # Reusable UI components
+│   ├── App.tsx              # Root: auth flow + navigation + socket setup
+│   ├── socket.ts            # Socket.IO singleton client
+│   ├── config.ts            # API base URL
+│   └── styles.ts            # Global stylesheet
+│
+├── backend/                 # Node.js Express server
+│   ├── server.js            # Main entry: routes, MQTT, Socket.IO
+│   ├── routes/
+│   │   ├── authRoutes.js    # POST /signup, POST /login
+│   │   └── productRoutes.js # CRUD /api/products
+│   ├── models/              # Mongoose models (legacy location)
+│   ├── services/
+│   │   └── userService.js   # Auth logic (hash, verify, JWT)
+│   ├── config/
+│   │   └── database.js      # MongoDB connection
+│   └── seeds/               # Legacy seed scripts
+│
+├── database/                # Centralised database layer
+│   ├── config/
+│   │   └── config.js        # MONGO_URI + connectDB export
+│   ├── entities/
+│   │   ├── User.js
+│   │   ├── Product.js
+│   │   ├── Card.js
+│   │   ├── Transaction.js
+│   │   └── index.js         # Barrel export
+│   └── seeds/
+│       ├── seedProducts.js  # Seeds 34 products
+│       └── seedUsers.js     # Seeds admin / agent / salesperson
+│
+├── RFID_MQTT/
+│   └── RFID_MQTT.ino        # Arduino sketch for ESP8266 + MFRC522
+│
+├── public/                  # Legacy web dashboard (PWA)
+│   ├── dashboard.html
+│   ├── dashboard.js
+│   └── dashboard.css
+│
+└── mqtt_topics.md           # MQTT topic reference
 ```
 
-**Validation Rules:**
+---
 
-- `amount` must be between `1` and `1,000,000`.
-- `uid` must be a valid string.
+## Roles & Permissions
+
+### Admin
+Full access to every screen.
+
+| Screen | Capability |
+|--------|-----------|
+| Dashboard | Real-time stats: top-ups today, payments today, active cards, total balance |
+| Top-Up | Add balance to any RFID card |
+| Payment | Process purchases via RFID card |
+| Products | Full CRUD — add, edit, delete products |
+| Transactions | View all transaction history |
+| Cards | Register new cards, look up card by UID |
+
+### Agent
+Focused on card operations.
+
+| Screen | Capability |
+|--------|-----------|
+| Top-Up | Add balance to RFID cards |
+| Cards | Register new cards, look up card by UID |
+
+### Salesperson
+Focused on sales.
+
+| Screen | Capability |
+|--------|-----------|
+| Products | Browse catalogue, add items to cart |
+| Payment | Review cart, process payment via RFID card |
 
 ---
 
-## 🚀 Deployment Guide
+## API Endpoints
 
-### 💻 Local Environment Setup
+### Auth
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/signup` | — | Create account (`{ username, password, role }`) |
+| POST | `/login` | — | Login → returns `{ token, username, role }` |
 
-Follow these steps to get the entire system running on your local machine and hardware.
+### Cards
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/cards` | — | List all cards |
+| GET | `/api/card/:uid` | — | Get single card by UID |
+| POST | `/api/cards/register` | — | Register card (`{ uid, holderName }`) |
 
-#### 1. Software Prerequisites
+### Wallet
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/topup` | JWT | Top-up card (`{ uid, amount, holderName? }`) |
+| POST | `/pay` | JWT | Debit card (`{ uid, productId }`) |
 
-- **Node.js**: [Download & Install](https://nodejs.org/) (v16+ recommended).
-- **Arduino IDE**: [Download & Install](https://www.arduino.cc/en/software).
-- **MQTT Explorer (Optional)**: Great for debugging. [Download here](http://mqtt-explorer.com/).
+### Products
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/products` | — | List all products |
+| POST | `/api/products` | JWT (admin) | Add product (`{ id, name, price, category }`) |
+| PUT | `/api/products/:id` | JWT (admin) | Update product (`{ name, price, category }`) |
+| DELETE | `/api/products/:id` | JWT (admin) | Delete product |
 
-#### 2. ESP8266 Firmware Setup
-
-1.  **Open Project**: Open `RFID_MQTT/RFID_MQTT.ino` in Arduino IDE.
-2.  **Board Manager**:
-    - Go to `File > Preferences`.
-    - Add to "Additional Boards Manager URLs": `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
-    - Go to `Tools > Board > Boards Manager`, search for **esp8266**, and install.
-3.  **Install Libraries**: Go to `Sketch > Include Library > Manage Libraries` and install:
-    - **MFRC522** (by GithubCommunity)
-    - **PubSubClient** (by Nick O'Leary)
-    - **ArduinoJson** (by Benoit Blanchon)
-4.  **Configure Code**:
-    - Update `WIFI_SSID` and `WIFI_PASS` in `RFID_MQTT.ino` (Lines 11-12).
-    - Ensure `MQTT_HOST` is set correctly (Line 13).
-5.  **Flash**: Select your board (e.g., NodeMCU 1.0) and Port, then click **Upload**.
-
-#### 3. Node.js Backend Setup
-
-1.  **Open Terminal**: Navigate to the project root directory.
-2.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
-3.  **Start Server**:
-    ```bash
-    node server.js
-    ```
-    _Note: The backend acts as a translator, bridging MQTT events to the web dashboard via WebSockets._
-
-#### 4. Access the Dashboard
-
-- Open your browser and go to: `http://localhost:5000`
-- Scan an RFID card; you should see the UID and balance appear in the log terminal instantly.
+### Dashboard & Transactions
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/dashboard` | JWT | Today's stats |
+| GET | `/api/transactions` | JWT | Recent transactions (paginated) |
+| GET | `/transactions/:uid` | — | Transactions for a specific card |
 
 ---
 
-## 🌐 Live Dashboard
+## Socket.IO Events
 
-Access the deployed system dashboard here:
-👉 **[RFID System Live Dashboard](http://157.173.101.159:9271/rfid-dashboard.html)**
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `card-status` | Server → Client | `{ uid, holderName, balance, status, present, ts }` | Card tapped on reader |
+| `card-balance` | Server → Client | `{ uid, balance }` | Balance updated |
+| `card-removed` | Server → Client | `{ uid }` | Card removed from reader |
+| `payment-success` | Server → Client | `{ uid, holderName, amount, balanceBefore, balanceAfter, description, timestamp }` | Payment confirmed |
+
+---
+
+## Database Schema
+
+### User
+```
+username    String  (unique)
+password    String  (bcrypt hashed)
+role        String  enum: ['user', 'admin', 'agent']
+```
+
+### Card
+```
+uid         String  (unique) — RFID card UID
+holderName  String
+balance     Number  (default: 0)
+lastTopup   Number
+passcode    String  (bcrypt hashed, optional)
+passcodeSet Boolean
+createdAt   Date
+updatedAt   Date
+```
+
+### Transaction
+```
+uid           String  — card UID
+holderName    String
+userId        String  — operator username
+type          String  enum: ['topup', 'debit']
+amount        Number
+balanceBefore Number
+balanceAfter  Number
+description   String
+timestamp     Date
+```
+
+### Product
+```
+id        String  (unique slug, e.g. 'coffee')
+name      String
+price     Number
+category  String  (food | drinks | rwandan | domains | services)
+createdAt Date
+updatedAt Date
+```
 
 ---
 
-- **"Serial Port not found"**: Ensure you have the [CH340 drivers](https://sparks.gogo.co.nz/ch340.html) installed for your NodeMCU.
-- **WebSocket Connection Failed**: Ensure `server.js` is running and `PORT 5000` is not blocked by your local firewall.
-- **MQTT Connection Failed**: Check your internet connection and ensure the host `157.173.101.159` is reachable.
-- **Card not reading?** Double-check the SPI wiring. The most common error is swapping SDA (D8) or RST (D3).
-- **Balance remains 0?** The system uses `std::map` in RAM; if the ESP8266 restarts, balances will reset unless top-ups are re-issued.
+## MQTT Topics
+
+See [`mqtt_topics.md`](./mqtt_topics.md) for full reference.
+
+**Base pattern:** `rfid/1nt3ern4l_53rv3r_3rr0r/card/<event>`
+
+| Topic suffix | Description |
+|---|---|
+| `/status` | Card tapped — ESP publishes UID |
+| `/balance` | Backend publishes updated balance to ESP |
+| `/topup` | Backend confirms top-up to ESP |
+| `/payment` | Backend confirms payment to ESP |
+| `/removed` | ESP publishes card removal |
 
 ---
+
+## Setup & Running
+
+### Prerequisites
+- Node.js 18+
+- MongoDB Atlas account (or use the provided URI)
+- Expo CLI (`npm install -g expo-cli`)
+- Android device or emulator
+
+### Backend
+
+```bash
+cd backend
+cp .env.example .env        # fill in MONGODB_URI and JWT_SECRET
+npm install
+node server.js
+```
+
+### Mobile App
+
+```bash
+cd mobile_app
+npm install
+npx expo start
+```
+
+Scan the QR code with Expo Go on your Android device.
+
+### Seed the Database
+
+```bash
+# From project root
+node database/seeds/seedProducts.js   # loads 34 products
+node database/seeds/seedUsers.js      # creates admin / agent / salesperson
+```
+
+Default credentials after seeding:
+
+| Username | Password | Role |
+|----------|----------|------|
+| admin | admin123 | Admin |
+| agent | agent123 | Agent |
+| salesperson | user123 | Salesperson |
+
+### Environment Variables (`backend/.env`)
+
+```env
+MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/<db>
+JWT_SECRET=your_secret_key
+PORT1=8228
+```
+
+---
+
+## Hardware — ESP8266 + MFRC522
+
+The Arduino sketch in `RFID_MQTT/RFID_MQTT.ino` handles:
+
+1. Connecting to WiFi
+2. Connecting to the MQTT broker
+3. Polling the MFRC522 for card presence
+4. Publishing card UID to `rfid/<team_id>/card/status` on tap
+5. Publishing removal event to `rfid/<team_id>/card/removed`
+6. Subscribing to `rfid/<team_id>/card/balance` to receive updated balance and write it back to the card's memory block
+
+---
+
+## Deliverables Checklist (Assignment)
+
+- [x] Agent login + wallet top-up
+- [x] Salesperson login + product selection + payment
+- [x] Dashboard with live stats (cards, balance, transactions, top-ups, payments)
+- [x] Balance update after every transaction
+- [x] MQTT communication with ESP8266
+- [x] Role-based navigation (Admin / Agent / Salesperson)
+- [x] `README.md`
+- [x] `mobile_app/`
+- [x] `backend/`
+- [x] `database/`
+- [x] `mqtt_topics.md`

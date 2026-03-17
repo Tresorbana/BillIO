@@ -51,8 +51,8 @@ const authenticate = (req, res, next) => {
 
 const PORT = process.env.PORT1 || 8228;
 const TEAM_ID = "1nt3ern4l_53rv3r_3rr0r";
-const MQTT_BROKER = "mqtt://157.173.101.159:1883";
-// const MQTT_BROKER = "mqtt://broker.hivemq.com:1883";
+// const MQTT_BROKER = "mqtt://157.173.101.159:1883";
+const MQTT_BROKER = "mqtt://broker.hivemq.com:1883";
 const MONGO_URI = process.env.MONGODB_URI;
 const SECRET_KEY = process.env.JWT_SECRET || 'secret123';
 
@@ -551,11 +551,27 @@ app.get('/api/cards', async (req, res) => {
   }
 });
 
-// Register a new card (assign holder name to a scanned UID)
+// Get all users (id + username only, no passwords)
+app.get('/api/users', authenticate, async (req, res) => {
+  try {
+    const { User } = require('./entities');
+    const users = await User.find({}, { _id: 1, username: 1, role: 1 }).sort({ username: 1 });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// Register a new card (assign holder name to a scanned UID — holderName must match a user)
 app.post('/api/cards/register', async (req, res) => {
   const { uid, holderName } = req.body;
   if (!uid || !holderName) return res.status(400).json({ error: 'UID and holderName required' });
   try {
+    const { User } = require('./entities');
+    const userExists = await User.findOne({ username: holderName });
+    if (!userExists) {
+      return res.status(400).json({ error: `No user found with username "${holderName}". Card holder must be a registered user.` });
+    }
     let card = await Card.findOne({ uid });
     if (card) {
       card.holderName = holderName;

@@ -21,8 +21,8 @@ When a card is tapped on the reader, the backend receives the UID over MQTT, loo
 
 ```mermaid
 graph TB
-    A[ESP8266 + MFRC522<br/>RFID Reader] -->|MQTT| B[HiveMQ Broker<br/>broker.hivemq.com:1883]
-    B --> C[Node.js Backend<br/>Express + Socket.IO<br/>157.173.101.159:8228]
+    A[ESP8266 + MFRC522<br/>RFID Reader] -->|MQTT| B[HiveMQ Broker<br/>broker.hivemq.com:1883<br/>mqtt://157.173.101.159:1883]
+    B --> C[Node.js Backend<br/>Express + Socket.IO]
     C -->|WebSocket| D[React Native Mobile App<br/>Expo - Android/iOS]
     C -->|REST API| D
     C -->|Mongoose| E[(MongoDB Atlas<br/>Cloud Database)]

@@ -11,11 +11,11 @@ ssid = 'RCA'
 password = '@RcaNyabihu2023'
 
 # ----------------- MQTT Configuration -----------------
-# mqtt_server = "mqtt://157.173.101.159"
-mqtt_server = "broker.hivemq.com"
+# mqtt_server = "broker.hivemq.com"
+mqtt_server = "157.173.101.159"
 MQTT_PORT = 1883
 # team_id = "vikings"
-team_id = "1nt3ern4l_53rv3r_3rr0r"
+team_id = "1nt3rn4l_53rv3r_3rr0r"
 
 # ----------------- MQTT Topics -----------------
 topic_status = f"rfid/{team_id}/card/status"

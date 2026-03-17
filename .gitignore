@@ -6,7 +6,6 @@ node_modules/
 server/wallet.db
 
 # Environment files
-.env
-.env.local
 .env.*.local
 */.env
+config.bat

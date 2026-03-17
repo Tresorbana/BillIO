@@ -1,4 +1,4 @@
-# MQTT Topics — Ballio RFID Wallet System
+# MQTT Topics — BillIO RFID Wallet System
 
 **Team ID:** `1nt3ern4l_53rv3r_3rr0r`
 

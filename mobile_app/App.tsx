@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts, Orbitron_700Bold } from '@expo-google-fonts/orbitron';
 
@@ -37,7 +38,8 @@ import {
   UserIcon,
   MenuIcon,
   CloseIcon,
-  WalletIcon
+  WalletIcon,
+  BrandText
 } from './components/Icons';
 
 // Import styles
@@ -239,7 +241,7 @@ function AuthScreen({ onLogin, onBack }: { onLogin: (loginData: { token: string;
         </TouchableOpacity>
 
         <Text style={styles.authTitle}>
-          <Text style={styles.brand}>Ballio</Text>
+          <BrandText size={28} />
         </Text>
         <Text style={styles.authSubtitle}>Secure Transaction System</Text>
 
@@ -334,6 +336,30 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
   const [cart, setCart] = useState<{ [key: string]: number }>({});
   const [isOnline, setIsOnline] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Slide animation
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  const navigateTo = (key: string, direction: 'left' | 'right') => {
+    const outVal = direction === 'left' ? -400 : 400;
+    const inVal  = direction === 'left' ?  400 : -400;
+    Animated.timing(slideAnim, {
+      toValue: outVal,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      setCurrentView(key);
+      setScannedCard(null);
+      setCart({});
+      slideAnim.setValue(inVal);
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 80,
+        friction: 12,
+      }).start();
+    });
+  };
 
   useEffect(() => {
     loadProducts();
@@ -486,6 +512,7 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
             products={products}
             onLoadProducts={loadProducts}
             setProducts={setProducts}
+            token={token}
             readonly={user.role === 'user'}
             cart={cart}
             onToggleProduct={toggleProduct}
@@ -497,10 +524,10 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
         );
 
       case 'transactions':
-        return <TransactionsScreen />;
+        return <TransactionsScreen username={user.username} role={user.role} token={token} />;
 
       case 'cards':
-        return <CardsScreen scannedCard={scannedCard} token={token} />;
+        return <CardsScreen scannedCard={scannedCard} token={token} role={user.role} />;
 
       case 'wallet':
         return <MyWalletScreen username={user.username} token={token} />;
@@ -530,12 +557,13 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
         { key: 'cards', label: 'Cards', IconComponent: CardsIcon }
       );
     }
-    // Salesperson (user) gets payment, products, and wallet
+    // Salesperson (user) gets payment, products, wallet, and transactions
     else if (user.role === 'user') {
       items.push(
         { key: 'payment', label: 'Payment', IconComponent: PaymentIcon },
         { key: 'products', label: 'Products', IconComponent: ProductsIcon },
-        { key: 'wallet', label: 'My Wallet', IconComponent: WalletIcon }
+        { key: 'wallet', label: 'My Wallet', IconComponent: WalletIcon },
+        { key: 'transactions', label: 'Transactions', IconComponent: TransactionsIcon }
       );
     }
     
@@ -545,15 +573,31 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
   const navItems = getNavItems();
 
   const onSwipeGesture = (event: any) => {
-    const { translationX, x } = event.nativeEvent;
-    
-    // Only respond to swipes from the left edge (first 50px) to open menu
-    if (x < 50 && translationX > 100 && !menuOpen) {
-      setMenuOpen(true);
-    }
-    // Swipe left to close menu (only when menu is open)
-    else if (translationX < -100 && menuOpen) {
-      setMenuOpen(false);
+    const { state, translationX, translationY, x } = event.nativeEvent;
+
+    // Only act on END state — fires exactly once per swipe
+    if (state !== State.END) return;
+
+    // Ignore mostly-vertical gestures
+    if (Math.abs(translationY) > Math.abs(translationX) * 0.7) return;
+
+    if (!menuOpen) {
+      // Open menu: swipe right from left edge
+      if (x < 60 && translationX > 60) {
+        setMenuOpen(true);
+        return;
+      }
+      // Navigate: require at least 80px horizontal travel
+      if (Math.abs(translationX) < 80) return;
+      const keys = navItems.map(i => i.key);
+      const idx = keys.indexOf(currentView);
+      if (translationX < 0 && idx < keys.length - 1) {
+        navigateTo(keys[idx + 1], 'left');
+      } else if (translationX > 0 && idx > 0) {
+        navigateTo(keys[idx - 1], 'right');
+      }
+    } else {
+      if (translationX < -60) setMenuOpen(false);
     }
   };
 
@@ -566,9 +610,9 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
 
         {/* Edge Swipe Area for Menu */}
         <PanGestureHandler 
-          onGestureEvent={onSwipeGesture}
-          activeOffsetX={[-10, 10]}
-          failOffsetY={[-20, 20]}
+          onHandlerStateChange={onSwipeGesture}
+          activeOffsetX={[-15, 15]}
+          failOffsetY={[-30, 30]}
         >
           <View style={styles.edgeSwipeArea} />
         </PanGestureHandler>
@@ -587,8 +631,8 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
         </TouchableOpacity>
         
         <Text style={styles.mobileHeaderTitle}>
-          <Text style={styles.brand}>Ballio</Text>
-          <Text style={styles.titleRest}> — RFID Wallet System</Text>
+          <BrandText size={20} />
+          <Text style={styles.titleRest}>  RFID Wallet</Text>
         </Text>
         
         <View style={styles.mobileHeaderRight}>
@@ -682,9 +726,15 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
         />
       )}
 
-        <View style={styles.mainContent}>
-          {renderCurrentView()}
-        </View>
+        <PanGestureHandler
+          onHandlerStateChange={onSwipeGesture}
+          activeOffsetX={[-15, 15]}
+          failOffsetY={[-30, 30]}
+        >
+          <Animated.View style={[styles.mainContent, { transform: [{ translateX: slideAnim }] }]}>
+            {renderCurrentView()}
+          </Animated.View>
+        </PanGestureHandler>
 
       </View>
     </SafeAreaView>

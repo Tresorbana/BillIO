@@ -9,9 +9,9 @@
    ========================================================== */
 #define WIFI_SSID  "GROUND"
 #define WIFI_PASS  "RCA@2024"
-#define MQTT_HOST  "broker.hivemq.com"
+#define MQTT_HOST  "157.173.101.159"
 #define MQTT_PORT  1883
-#define TEAM_ID    "1nt3ern4l_53rv3r_3rr0r"
+#define TEAM_ID    "1nt3rn4l_53rv3r_3rr0r"
 
 /* ==========================================================
    AUTO-GENERATED TOPICS

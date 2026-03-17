@@ -19,30 +19,21 @@ When a card is tapped on the reader, the backend receives the UID over MQTT, loo
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    RFID Hardware                        │
-│         ESP8266 + MFRC522 Card Reader                   │
-└──────────────────────┬──────────────────────────────────┘
-                       │ MQTT (TCP 1883)
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│                  MQTT Broker                            │
-│              broker.hivemq.com                          │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│               Backend Server (Node.js)                  │
-│  Express REST API + Socket.IO + MQTT Client             │
-│  Deployed at: http://157.173.101.159:8228               │
-└──────────┬────────────────────────────┬─────────────────┘
-           │ MongoDB Atlas               │ Socket.IO / REST
-           ▼                            ▼
-┌──────────────────┐        ┌───────────────────────────┐
-│   MongoDB Atlas  │        │   React Native Mobile App  │
-│  (Cloud DB)      │        │   (Expo — Android/iOS)     │
-└──────────────────┘        └───────────────────────────┘
+```mermaid
+graph TB
+    A[ESP8266 + MFRC522<br/>RFID Reader] -->|MQTT| B[HiveMQ Broker<br/>broker.hivemq.com:1883]
+    B --> C[Node.js Backend<br/>Express + Socket.IO<br/>157.173.101.159:8228]
+
+    C -->|WebSocket| D[React Native Mobile App<br/>Expo - Android/iOS]
+    C -->|REST API| D
+
+    C -->|Mongoose| E[(MongoDB Atlas<br/>Cloud Database)]
+
+    style A fill:#e1f5fe
+    style B fill:#fff3e0
+    style C fill:#f3e5f5
+    style D fill:#e8f5e8
+    style E fill:#ffebee
 ```
 
 ---
@@ -120,82 +111,99 @@ When a card is tapped on the reader, the backend receives the UID over MQTT, loo
 
 ## Roles & Permissions
 
-### Admin
-Full access to every screen.
+```mermaid
+graph TD
+    A[User Login] --> B{Role Check}
 
-| Screen | Capability |
-|--------|-----------|
-| Dashboard | Real-time stats: top-ups today, payments today, active cards, total balance |
-| Top-Up | Add balance to any RFID card |
-| Payment | Process purchases via RFID card |
-| Products | Full CRUD — add, edit, delete products |
-| Transactions | View all transaction history |
-| Cards | Register new cards, look up card by UID |
+    B -->|Admin| C[Full Dashboard Access]
+    B -->|Agent| D[Card Operations Only]
+    B -->|Salesperson| E[Sales Operations Only]
 
-### Agent
-Focused on card operations.
+    C --> F[Dashboard Stats]
+    C --> G[Top-Up Cards]
+    C --> H[Process Payments]
+    C --> I[Product CRUD]
+    C --> J[Transaction History]
+    C --> K[Card Registry]
 
-| Screen | Capability |
-|--------|-----------|
-| Top-Up | Add balance to RFID cards |
-| Cards | Register new cards, look up card by UID |
+    D --> G
+    D --> K
 
-### Salesperson
-Focused on sales.
+    E --> H
+    E --> L[Browse Products]
 
-| Screen | Capability |
-|--------|-----------|
-| Products | Browse catalogue, add items to cart |
-| Payment | Review cart, process payment via RFID card |
+    style A fill:#e3f2fd
+    style C fill:#c8e6c9
+    style D fill:#fff3e0
+    style E fill:#fce4ec
+```
 
 ---
 
 ## API Endpoints
 
-### Auth
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/signup` | — | Create account (`{ username, password, role }`) |
-| POST | `/login` | — | Login → returns `{ token, username, role }` |
+```mermaid
+graph TD
+    A[API Endpoints] --> B[Authentication]
+    A --> C[Card Management]
+    A --> D[Wallet Operations]
+    A --> E[Product Management]
+    A --> F[Reporting]
 
-### Cards
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/cards` | — | List all cards |
-| GET | `/api/card/:uid` | — | Get single card by UID |
-| POST | `/api/cards/register` | — | Register card (`{ uid, holderName }`) |
+    B --> B1[POST /signup]
+    B --> B2[POST /login]
 
-### Wallet
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/topup` | JWT | Top-up card (`{ uid, amount, holderName? }`) |
-| POST | `/pay` | JWT | Debit card (`{ uid, productId }`) |
+    C --> C1[GET /api/cards]
+    C --> C2[GET /api/card/:uid]
+    C --> C3[POST /api/cards/register]
 
-### Products
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/products` | — | List all products |
-| POST | `/api/products` | JWT (admin) | Add product (`{ id, name, price, category }`) |
-| PUT | `/api/products/:id` | JWT (admin) | Update product (`{ name, price, category }`) |
-| DELETE | `/api/products/:id` | JWT (admin) | Delete product |
+    D --> D1[POST /topup]
+    D --> D2[POST /pay]
 
-### Dashboard & Transactions
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/dashboard` | JWT | Today's stats |
-| GET | `/api/transactions` | JWT | Recent transactions (paginated) |
-| GET | `/transactions/:uid` | — | Transactions for a specific card |
+    E --> E1[GET /api/products]
+    E --> E2[POST /api/products]
+    E --> E3[PUT /api/products/:id]
+    E --> E4[DELETE /api/products/:id]
+
+    F --> F1[GET /api/dashboard]
+    F --> F2[GET /api/transactions]
+
+    style A fill:#f3e5f5
+    style B fill:#e1f5fe
+    style C fill:#fff3e0
+    style D fill:#e8f5e8
+    style E fill:#ffebee
+    style F fill:#f1f8e9
+```
 
 ---
 
 ## Socket.IO Events
 
-| Event | Direction | Payload | Description |
-|-------|-----------|---------|-------------|
-| `card-status` | Server → Client | `{ uid, holderName, balance, status, present, ts }` | Card tapped on reader |
-| `card-balance` | Server → Client | `{ uid, balance }` | Balance updated |
-| `card-removed` | Server → Client | `{ uid }` | Card removed from reader |
-| `payment-success` | Server → Client | `{ uid, holderName, amount, balanceBefore, balanceAfter, description, timestamp }` | Payment confirmed |
+```mermaid
+sequenceDiagram
+    participant ESP as ESP8266 Reader
+    participant Broker as MQTT Broker
+    participant Backend as Node.js Backend
+    participant Mobile as Mobile App
+
+    ESP->>Broker: rfid/team/card/status {uid, present: true}
+    Broker->>Backend: MQTT message received
+    Backend->>Backend: Lookup card in MongoDB
+    Backend->>Mobile: Socket.IO: card-status {uid, holderName, balance}
+    Mobile->>Mobile: Display card info for transaction
+
+    Note over Mobile: User confirms transaction
+    Mobile->>Backend: HTTP POST /topup or /pay
+    Backend->>Backend: Update database balance
+    Backend->>Broker: rfid/team/card/balance {uid, new_balance}
+    Broker->>ESP: MQTT message to ESP8266
+    ESP->>ESP: Write new balance to RFID card
+
+    ESP->>Broker: rfid/team/card/removed {uid}
+    Broker->>Backend: Card removal notification
+    Backend->>Mobile: Socket.IO: card-removed {uid}
+```
 
 ---
 

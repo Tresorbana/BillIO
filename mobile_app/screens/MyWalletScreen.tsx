@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { styles } from '../styles';
 import { API_BASE } from '../config';
+import { WalletIcon, RefreshIcon, UserIcon } from '../components/Icons';
 
 interface Card {
   uid: string;
@@ -45,7 +46,10 @@ export default function MyWalletScreen({ username, token }: MyWalletScreenProps)
 
   return (
     <ScrollView style={styles.screenContainer}>
-      <Text style={styles.pageTitle}>👛 My Wallet</Text>
+      <View style={styles.pageTitleRow}>
+        <WalletIcon size={26} color="#6366f1" />
+        <Text style={styles.pageTitle}>My Wallet</Text>
+      </View>
       <Text style={styles.pageSubtitle}>Cards linked to your account</Text>
 
       {/* Total balance summary */}
@@ -53,7 +57,7 @@ export default function MyWalletScreen({ username, token }: MyWalletScreenProps)
         <View style={styles.panelBody}>
           <View style={{ alignItems: 'center', paddingVertical: 12 }}>
             <Text style={styles.balanceLabel}>Total Balance</Text>
-            <Text style={styles.balanceValue}>${totalBalance.toFixed(2)}</Text>
+            <Text style={styles.balanceValue}>${(totalBalance ?? 0).toFixed(2)}</Text>
             <Text style={{ color: '#8888aa', fontSize: 13, marginTop: 4 }}>
               {cards.length} card{cards.length !== 1 ? 's' : ''} registered
             </Text>
@@ -67,7 +71,10 @@ export default function MyWalletScreen({ username, token }: MyWalletScreenProps)
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={styles.panelTitle}>My Cards</Text>
             <TouchableOpacity onPress={loadMyCards}>
-              <Text style={{ color: '#6366f1', fontSize: 13 }}>↻ Refresh</Text>
+              <View style={styles.iconRow}>
+                <RefreshIcon size={14} color="#6366f1" />
+                <Text style={{ color: '#6366f1', fontSize: 13, marginLeft: 4 }}>Refresh</Text>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -111,12 +118,15 @@ export default function MyWalletScreen({ username, token }: MyWalletScreenProps)
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                   <View>
                     <Text style={{ color: '#8888aa', fontSize: 11, marginBottom: 2 }}>HOLDER</Text>
-                    <Text style={{ color: '#e5e7eb', fontSize: 14 }}>{card.holderName}</Text>
+                    <View style={styles.iconRow}>
+                      <UserIcon size={13} color="#8888aa" />
+                      <Text style={{ color: '#e5e7eb', fontSize: 14, marginLeft: 4 }}>{card.holderName}</Text>
+                    </View>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={{ color: '#8888aa', fontSize: 11, marginBottom: 2 }}>BALANCE</Text>
                     <Text style={{ color: '#22c55e', fontSize: 22, fontWeight: 'bold' }}>
-                      ${card.balance.toFixed(2)}
+                      ${(card.balance ?? 0).toFixed(2)}
                     </Text>
                   </View>
                 </View>

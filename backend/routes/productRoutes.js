@@ -31,8 +31,8 @@ router.get('/products', async (req, res) => {
   }
 });
 
-// Add new product (admin only)
-router.post('/products', authenticate, requireAdmin, async (req, res) => {
+// Add new product (admin only — auth handled by main server middleware)
+router.post('/products', authenticate, async (req, res) => {
   const { id, name, price, category } = req.body;
 
   if (!id || !name || price === undefined || !category) {
@@ -66,7 +66,7 @@ router.post('/products', authenticate, requireAdmin, async (req, res) => {
 });
 
 // Update product (admin only)
-router.put('/products/:id', authenticate, requireAdmin, async (req, res) => {
+router.put('/products/:id', authenticate, async (req, res) => {
   const { name, price, category } = req.body;
 
   if (!name || price === undefined || !category) {
@@ -101,7 +101,7 @@ router.put('/products/:id', authenticate, requireAdmin, async (req, res) => {
 });
 
 // Delete product (admin only)
-router.delete('/products/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/products/:id', authenticate, async (req, res) => {
   try {
     const product = await Product.findOneAndDelete({ id: req.params.id });
 

@@ -22,6 +22,7 @@ import PaymentsScreen from './screens/PaymentsScreen';
 import ProductsScreen from './screens/ProductsScreen';
 import TransactionsScreen from './screens/TransactionsScreen';
 import CardsScreen from './screens/CardsScreen';
+import MyWalletScreen from './screens/MyWalletScreen';
 
 // Import components
 import CornerAccents from './components/CornerAccents';
@@ -35,7 +36,8 @@ import {
   LogoutIcon,
   UserIcon,
   MenuIcon,
-  CloseIcon
+  CloseIcon,
+  WalletIcon
 } from './components/Icons';
 
 // Import styles
@@ -498,7 +500,10 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
         return <TransactionsScreen />;
 
       case 'cards':
-        return <CardsScreen />;
+        return <CardsScreen scannedCard={scannedCard} token={token} />;
+
+      case 'wallet':
+        return <MyWalletScreen username={user.username} token={token} />;
 
       default:
         return <DashboardScreen token={token}/>;
@@ -513,8 +518,6 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
     if (user.role === 'admin') {
       items.push(
         { key: 'dashboard', label: 'Dashboard', IconComponent: DashboardIcon },
-        { key: 'topup', label: 'Top-Up', IconComponent: TopUpIcon },
-        { key: 'payment', label: 'Payment', IconComponent: PaymentIcon },
         { key: 'products', label: 'Products', IconComponent: ProductsIcon },
         { key: 'transactions', label: 'Transactions', IconComponent: TransactionsIcon },
         { key: 'cards', label: 'Cards', IconComponent: CardsIcon }
@@ -527,11 +530,12 @@ function MainApp({ user, token, onLogout }: { user: User; token: string | null; 
         { key: 'cards', label: 'Cards', IconComponent: CardsIcon }
       );
     }
-    // Salesperson (user) gets payment and products
+    // Salesperson (user) gets payment, products, and wallet
     else if (user.role === 'user') {
       items.push(
         { key: 'payment', label: 'Payment', IconComponent: PaymentIcon },
-        { key: 'products', label: 'Products', IconComponent: ProductsIcon }
+        { key: 'products', label: 'Products', IconComponent: ProductsIcon },
+        { key: 'wallet', label: 'My Wallet', IconComponent: WalletIcon }
       );
     }
     

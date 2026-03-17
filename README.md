@@ -1,4 +1,4 @@
-# Ballio — RFID Wallet System
+# BillIO — RFID Wallet System
 
 > A full-stack IoT payment platform built for Y2 Mobile Dashboard Assignment.  
 > RFID cards are used as digital wallets — tap to top-up, tap to pay.
@@ -7,7 +7,7 @@
 
 ## What It Does
 
-Ballio connects a physical RFID reader (ESP8266 + MFRC522) to a mobile dashboard through MQTT and a REST/WebSocket backend. Three roles interact with the system:
+BillIO connects a physical RFID reader (ESP8266 + MFRC522) to a mobile dashboard through MQTT and a REST/WebSocket backend. Three roles interact with the system:
 
 - **Admin** — full control: dashboard stats, top-ups, payments, product management, transaction history, card registry
 - **Agent** — top-up cards and register new cards

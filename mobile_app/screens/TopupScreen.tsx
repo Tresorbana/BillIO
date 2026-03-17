@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { styles } from '../styles';
 import { API_BASE } from '../config';
+import {
+  TopUpIcon, RfidIcon, SearchIcon, CheckIcon, UserIcon, WarningIcon, ArrowUpIcon, XIcon
+} from '../components/Icons';
 
 interface Card {
   uid: string;
@@ -65,14 +68,14 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
     if (!scannedCard || !amount) return;
     const amt = parseInt(amount);
     if (!amt || amt <= 0) return Alert.alert('Error', 'Enter a valid amount');
-
     setLoading(true);
     setResult(null);
     try {
       await onTopup(scannedCard.uid, amt, scannedCard.holderName || undefined);
-      setResult({ type: 'success', message: `Added ${amt.toLocaleString()} — New Balance: ${(scannedCard.balance + amt).toLocaleString()}` });
+      const newBal = (scannedCard.balance ?? 0) + amt;
+      setResult({ type: 'success', message: `Added ${amt.toLocaleString()} — New Balance: ${newBal.toLocaleString()}` });
       setAmount('');
-      setScannedCard({ ...scannedCard, balance: scannedCard.balance + amt });
+      setScannedCard({ ...scannedCard, balance: (scannedCard.balance ?? 0) + amt });
     } catch {
       setResult({ type: 'error', message: 'Top-up failed' });
     } finally {
@@ -82,7 +85,10 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
 
   return (
     <ScrollView style={styles.screenContainer}>
-      <Text style={styles.pageTitle}>💰 Top-Up Card</Text>
+      <View style={styles.pageTitleRow}>
+        <TopUpIcon size={26} color="#6366f1" />
+        <Text style={styles.pageTitle}>Top-Up Card</Text>
+      </View>
       <Text style={styles.pageSubtitle}>Add funds to an RFID card</Text>
 
       <View style={styles.panel}>
@@ -92,13 +98,14 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
         <View style={styles.panelBody}>
           {!scannedCard ? (
             <View style={styles.scanArea}>
-              <Text style={styles.scanIcon}>📡</Text>
+              <RfidIcon size={48} color="#6366f1" />
               <Text style={styles.scanText}>Waiting for RFID card scan...</Text>
               <Text style={styles.scanSubtext}>Or enter UID manually below</Text>
               <View style={styles.manualLookup}>
                 <TextInput
                   style={styles.manualInput}
                   placeholder="Enter UID"
+                  placeholderTextColor="#555"
                   value={manualUid}
                   onChangeText={setManualUid}
                   autoCapitalize="none"
@@ -110,19 +117,26 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
             </View>
           ) : !scannedCard.holderName ? (
             <View style={styles.scanArea}>
-              <Text style={styles.scanIcon}>🔍</Text>
+              <SearchIcon size={48} color="#f59e0b" />
               <Text style={styles.scannedUid}>{scannedCard.uid}</Text>
               <Text style={styles.scanText}>Unknown Card</Text>
               {!showRegister ? (
                 <TouchableOpacity style={styles.btnWarning} onPress={() => setShowRegister(true)}>
-                  <Text style={styles.btnWarningText}>⚠️ Card not registered — Register it first</Text>
+                  <View style={styles.iconRow}>
+                    <WarningIcon size={16} color="#fff" />
+                    <Text style={[styles.btnWarningText, { marginLeft: 6 }]}>Card not registered — Register it first</Text>
+                  </View>
                 </TouchableOpacity>
               ) : (
                 <View style={styles.registerForm}>
-                  <Text style={styles.alertWarning}>⚠️ Card not registered in database</Text>
+                  <View style={[styles.iconRow, { marginBottom: 12 }]}>
+                    <WarningIcon size={16} color="#f59e0b" />
+                    <Text style={[styles.alertWarning, { marginLeft: 6, marginBottom: 0 }]}>Card not registered in database</Text>
+                  </View>
                   <TextInput
                     style={styles.input}
                     placeholder="Card Holder Name"
+                    placeholderTextColor="#555"
                     value={regHolder}
                     onChangeText={setRegHolder}
                   />
@@ -134,10 +148,13 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
             </View>
           ) : (
             <View style={styles.scanArea}>
-              <Text style={styles.scanIcon}>✅</Text>
+              <CheckIcon size={48} color="#22c55e" />
               <Text style={styles.scannedUid}>{scannedCard.uid}</Text>
-              <Text style={styles.scannedHolder}>👤 {scannedCard.holderName}</Text>
-              <Text style={styles.scannedBalance}>Balance: ${scannedCard.balance.toLocaleString()}</Text>
+              <View style={styles.iconRow}>
+                <UserIcon size={16} color="#9ca3af" />
+                <Text style={[styles.scannedHolder, { marginLeft: 6 }]}>{scannedCard.holderName}</Text>
+              </View>
+              <Text style={styles.scannedBalance}>Balance: ${(scannedCard.balance ?? 0).toLocaleString()}</Text>
             </View>
           )}
         </View>
@@ -151,14 +168,19 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
           <View style={styles.panelBody}>
             {result && (
               <View style={[styles.alert, result.type === 'success' ? styles.alertSuccess : styles.alertError]}>
-                <Text style={styles.alertText}>
-                  {result.type === 'success' ? '✅' : '❌'} {result.message}
-                </Text>
+                <View style={styles.iconRow}>
+                  {result.type === 'success'
+                    ? <CheckIcon size={16} color="#22c55e" />
+                    : <XIcon size={16} color="#ef4444" />
+                  }
+                  <Text style={[styles.alertText, { marginLeft: 6 }]}>{result.message}</Text>
+                </View>
               </View>
             )}
             <TextInput
               style={styles.input}
               placeholder="Amount ($)"
+              placeholderTextColor="#555"
               value={amount}
               onChangeText={setAmount}
               keyboardType="numeric"
@@ -169,7 +191,10 @@ export default function TopupScreen({ scannedCard, setScannedCard, onTopup }: To
               onPress={handleTopup}
               disabled={loading}
             >
-              <Text style={styles.btnSuccessText}>⬆ Process Top-Up</Text>
+              <View style={styles.iconRow}>
+                <ArrowUpIcon size={16} color="#fff" />
+                <Text style={[styles.btnSuccessText, { marginLeft: 6 }]}>Process Top-Up</Text>
+              </View>
             </TouchableOpacity>
           </View>
         </View>

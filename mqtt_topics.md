@@ -10,20 +10,16 @@ All topics follow the pattern: `rfid/<team_id>/card/<event>`
 
 ```mermaid
 graph TD
-    A[ESP8266 Reader] -->|Publishes| B[MQTT Broker<br/>broker.hivemq.com:1883]
+    A[ESP8266 Reader] -->|Publishes| B[MQTT Broker]
     C[Node.js Backend] -->|Publishes| B
     B -->|Subscribes| A
     B -->|Subscribes| C
 
-    A -->|rfid/team/card/status| B
-    A -->|rfid/team/card/removed| B
-    C -->|rfid/team/card/balance| B
-    C -->|rfid/team/card/topup| B
-    C -->|rfid/team/card/payment| B
-
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-    style C fill:#f3e5f5
+    A -->|card/status| B
+    A -->|card/removed| B
+    C -->|card/balance| B
+    C -->|card/topup| B
+    C -->|card/payment| B
 ```
 
 ## Topics

@@ -23,17 +23,9 @@ When a card is tapped on the reader, the backend receives the UID over MQTT, loo
 graph TB
     A[ESP8266 + MFRC522<br/>RFID Reader] -->|MQTT| B[HiveMQ Broker<br/>broker.hivemq.com:1883]
     B --> C[Node.js Backend<br/>Express + Socket.IO<br/>157.173.101.159:8228]
-
     C -->|WebSocket| D[React Native Mobile App<br/>Expo - Android/iOS]
     C -->|REST API| D
-
     C -->|Mongoose| E[(MongoDB Atlas<br/>Cloud Database)]
-
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-    style C fill:#f3e5f5
-    style D fill:#e8f5e8
-    style E fill:#ffebee
 ```
 
 ---
@@ -131,11 +123,6 @@ graph TD
 
     E --> H
     E --> L[Browse Products]
-
-    style A fill:#e3f2fd
-    style C fill:#c8e6c9
-    style D fill:#fff3e0
-    style E fill:#fce4ec
 ```
 
 ---
@@ -167,13 +154,6 @@ graph TD
 
     F --> F1[GET /api/dashboard]
     F --> F2[GET /api/transactions]
-
-    style A fill:#f3e5f5
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#e8f5e8
-    style E fill:#ffebee
-    style F fill:#f1f8e9
 ```
 
 ---

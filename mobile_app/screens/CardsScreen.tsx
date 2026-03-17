@@ -5,6 +5,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { styles } from '../styles';
 import { API_BASE } from '../config';
+import { CardsIcon, WarningIcon, XIcon, UserIcon, SearchIcon } from '../components/Icons';
 
 interface Card {
   uid: string;
@@ -22,9 +23,10 @@ interface AppUser {
 interface CardsScreenProps {
   scannedCard?: Card | null;
   token?: string | null;
+  role?: string;
 }
 
-export default function CardsScreen({ scannedCard, token }: CardsScreenProps) {
+export default function CardsScreen({ scannedCard, token, role }: CardsScreenProps) {
   const [cards, setCards] = useState<Card[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,18 +121,24 @@ export default function CardsScreen({ scannedCard, token }: CardsScreenProps) {
 
   return (
     <ScrollView style={styles.screenContainer}>
-      <Text style={styles.pageTitle}>💳 Cards</Text>
+      <View style={styles.pageTitleRow}>
+        <CardsIcon size={26} color="#6366f1" />
+        <Text style={styles.pageTitle}>Cards</Text>
+      </View>
       <Text style={styles.pageSubtitle}>Register and manage RFID cards</Text>
 
-      {/* Unregistered card banner */}
-      {scannedCard && !scannedCard.holderName && (
+      {/* Unregistered card banner — agents only */}
+      {role === 'agent' && scannedCard && !scannedCard.holderName && (
         <View style={[styles.panel, { borderColor: '#f59e0b', borderWidth: 1 }]}>
           <View style={styles.panelBody}>
-            <Text style={{ color: '#f59e0b', fontWeight: 'bold', marginBottom: 6 }}>
-              ⚠️ Unregistered card detected: {scannedCard.uid}
-            </Text>
+            <View style={styles.iconRow}>
+              <WarningIcon size={16} color="#f59e0b" />
+              <Text style={{ color: '#f59e0b', fontWeight: 'bold', marginLeft: 6 }}>
+                Unregistered card detected: {scannedCard.uid}
+              </Text>
+            </View>
             <TouchableOpacity
-              style={styles.btnPrimary}
+              style={[styles.btnPrimary, { marginTop: 10 }]}
               onPress={() => { setUid(scannedCard.uid); setShowForm(true); }}
             >
               <Text style={styles.btnPrimaryText}>Register this card</Text>
@@ -139,66 +147,68 @@ export default function CardsScreen({ scannedCard, token }: CardsScreenProps) {
         </View>
       )}
 
-      {/* Register Card */}
-      <View style={styles.panel}>
-        <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>Register Card</Text>
+      {/* Register Card — agents only */}
+      {role === 'agent' && (
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>Register Card</Text>
+          </View>
+          <View style={styles.panelBody}>
+            <TouchableOpacity style={styles.btnSuccess} onPress={() => setShowForm(!showForm)}>
+              <Text style={styles.btnSuccessText}>{showForm ? '- Cancel' : '+ Register New Card'}</Text>
+            </TouchableOpacity>
+
+            {showForm && (
+              <View style={styles.addForm}>
+                <Text style={styles.label}>Card UID</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. A1B2C3D4"
+                  placeholderTextColor="#555"
+                  value={uid}
+                  onChangeText={setUid}
+                  autoCapitalize="characters"
+                />
+
+                <Text style={styles.label}>Card Holder (select user)</Text>
+                {users.length === 0 ? (
+                  <Text style={{ color: '#8888aa', marginBottom: 16 }}>Loading users...</Text>
+                ) : (
+                  <View style={{ backgroundColor: '#fff', marginBottom: 16 }}>
+                    <Picker
+                      selectedValue={selectedUsername}
+                      onValueChange={v => setSelectedUsername(v)}
+                      style={{ color: '#000' }}
+                      dropdownIconColor="#000"
+                    >
+                      <Picker.Item label="— Select a user —" value="" color="#000" />
+                      {users.map(u => (
+                        <Picker.Item
+                          key={u._id}
+                          label={`${u.username} (${u.role === 'user' ? 'Salesperson' : u.role === 'agent' ? 'Agent' : 'Admin'})`}
+                          value={u.username}
+                          color="#000"
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.btnPrimary, registering && styles.btnDisabled]}
+                  onPress={registerCard}
+                  disabled={registering}
+                >
+                  {registering
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={styles.btnPrimaryText}>Register Card</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
-        <View style={styles.panelBody}>
-          <TouchableOpacity style={styles.btnSuccess} onPress={() => setShowForm(!showForm)}>
-            <Text style={styles.btnSuccessText}>{showForm ? '− Cancel' : '+ Register New Card'}</Text>
-          </TouchableOpacity>
-
-          {showForm && (
-            <View style={styles.addForm}>
-              <Text style={styles.label}>Card UID</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. A1B2C3D4"
-                placeholderTextColor="#555"
-                value={uid}
-                onChangeText={setUid}
-                autoCapitalize="characters"
-              />
-
-              <Text style={styles.label}>Card Holder (select user)</Text>
-              {users.length === 0 ? (
-                <Text style={{ color: '#8888aa', marginBottom: 16 }}>Loading users...</Text>
-              ) : (
-                <View style={{ backgroundColor: '#fff', marginBottom: 16 }}>
-                  <Picker
-                    selectedValue={selectedUsername}
-                    onValueChange={v => setSelectedUsername(v)}
-                    style={{ color: '#000' }}
-                    dropdownIconColor="#000"
-                  >
-                    <Picker.Item label="— Select a user —" value="" color="#000" />
-                    {users.map(u => (
-                      <Picker.Item
-                        key={u._id}
-                        label={`${u.username} (${u.role === 'user' ? 'Salesperson' : u.role === 'agent' ? 'Agent' : 'Admin'})`}
-                        value={u.username}
-                        color="#000"
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={[styles.btnPrimary, registering && styles.btnDisabled]}
-                onPress={registerCard}
-                disabled={registering}
-              >
-                {registering
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.btnPrimaryText}>💳 Register Card</Text>
-                }
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
+      )}
 
       {/* Lookup */}
       <View style={styles.panel}>
@@ -222,7 +232,10 @@ export default function CardsScreen({ scannedCard, token }: CardsScreenProps) {
 
           {lookedUpCard === 'not-found' && (
             <View style={{ marginTop: 12 }}>
-              <Text style={{ color: '#f87171', marginBottom: 8 }}>❌ Card not found — register it?</Text>
+              <View style={styles.iconRow}>
+                <XIcon size={16} color="#f87171" />
+                <Text style={{ color: '#f87171', marginLeft: 6, marginBottom: 8 }}>Card not found — register it?</Text>
+              </View>
               <TouchableOpacity style={styles.btnSuccess} onPress={() => { setUid(lookupUid); setShowForm(true); }}>
                 <Text style={styles.btnSuccessText}>+ Register this UID</Text>
               </TouchableOpacity>
@@ -231,9 +244,12 @@ export default function CardsScreen({ scannedCard, token }: CardsScreenProps) {
 
           {lookedUpCard && lookedUpCard !== 'not-found' && (
             <View style={styles.balanceDisplay}>
-              <Text style={styles.balanceHolder}>👤 {lookedUpCard.holderName}</Text>
+              <View style={styles.iconRow}>
+                <UserIcon size={16} color="#9ca3af" />
+                <Text style={[styles.balanceHolder, { marginLeft: 6 }]}>{lookedUpCard.holderName}</Text>
+              </View>
               <Text style={styles.balanceLabel}>Balance</Text>
-              <Text style={styles.balanceValue}>${lookedUpCard.balance.toLocaleString()}</Text>
+              <Text style={styles.balanceValue}>${(lookedUpCard.balance ?? 0).toLocaleString()}</Text>
               <Text style={{ color: '#8888aa', fontSize: 12, marginTop: 4 }}>UID: {lookedUpCard.uid}</Text>
               <Text style={{ color: '#8888aa', fontSize: 12 }}>
                 Registered: {new Date(lookedUpCard.createdAt).toLocaleString()}
@@ -263,7 +279,7 @@ export default function CardsScreen({ scannedCard, token }: CardsScreenProps) {
                 <View key={card.uid} style={styles.tableRow}>
                   <Text style={styles.tableCellMono}>{card.uid}</Text>
                   <Text style={styles.tableCell}>{card.holderName}</Text>
-                  <Text style={[styles.tableCell, styles.textSuccess]}>${card.balance.toLocaleString()}</Text>
+                  <Text style={[styles.tableCell, styles.textSuccess]}>${(card.balance ?? 0).toLocaleString()}</Text>
                   <Text style={styles.tableCell}>{new Date(card.createdAt).toLocaleDateString()}</Text>
                 </View>
               ))}

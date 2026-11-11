@@ -2,8 +2,8 @@
   "name": "rfid-wallet-server",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node init && node server.js",
+    "dev": "node init && nodemon server.js",
     "seed": "node seed.js"
   },
   "dependencies": {
